@@ -48,36 +48,44 @@ public class ClientMain {
             BulletinBoardInterface bulletinBoard = client.connectToServer();
             client.setBulletinBoard(bulletinBoard);
 
-            // login
-            client.login();
+            // Maak een nieuw JFrame voor de applicatie
+            JFrame frame = new JFrame("Chat System");
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.setSize(500, 500);
+
+            // Start met het inlogpaneel en geef ClientMain door aan het LoginPanel
+            LoginPanel loginPanel = new LoginPanel(client, frame);
+            frame.setContentPane(loginPanel);
+            frame.setVisible(true);
             
-            boolean online = true;
-            while (online){
-                System.out.println("1. Bericht plaatsen");
-                System.out.println("2. Bericht ophalen");
-                System.out.println("3. Kijken of er nieuwe vrienden zijn");
-                System.out.println("4. Afmelden");
+
+            // boolean online = true;
+            // while (online){
+            //     System.out.println("1. Bericht plaatsen");
+            //     System.out.println("2. Bericht ophalen");
+            //     System.out.println("3. Kijken of er nieuwe vrienden zijn");
+            //     System.out.println("4. Afmelden");
                 
-                String keuze = System.console().readLine();
-                switch (keuze) {
-                    case "1":
-                        System.out.println("Bericht plaatsen");
-                        break;
-                    case "2":
-                        System.out.println("Bericht ophalen");
-                        break;
-                    case "3":
-                        client.lookForNewFriends(bulletinBoard);
-                        break;
-                    case "4":
-                        System.out.println("Afmelden");
-                        online = false;
-                        break;
-                    default:
-                        System.out.println("Ongeldige keuze");
-                        break;
-                }
-            }
+            //     String keuze = System.console().readLine();
+            //     switch (keuze) {
+            //         case "1":
+            //             System.out.println("Bericht plaatsen");
+            //             break;
+            //         case "2":
+            //             System.out.println("Bericht ophalen");
+            //             break;
+            //         case "3":
+            //             client.lookForNewFriends(bulletinBoard);
+            //             break;
+            //         case "4":
+            //             System.out.println("Afmelden");
+            //             online = false;
+            //             break;
+            //         default:
+            //             System.out.println("Ongeldige keuze");
+            //             break;
+            //     }
+            // }
             
 
         } catch (Exception e) {
@@ -108,17 +116,23 @@ public class ClientMain {
         return bulletinBoard;
     }
 
-    public void login() throws Exception {
-        while (true) {
-            System.out.print("Geef een gebruikersnaam in: ");
-            username = System.console().readLine();
-            if (username.length() > 0) {
-                System.out.print("Is " + username + " je username? (ja/nee): ");
-                if (System.console().readLine().equals("ja")) {
-                    break;
-                }
-            }
-        }
+    public void login(JFrame frame) throws Exception {
+        // while (true) {
+        //     System.out.print("Geef een gebruikersnaam in: ");
+        //     username = System.console().readLine();
+        //     if (username.length() > 0) {
+        //         System.out.print("Is " + username + " je username? (ja/nee): ");
+        //         if (System.console().readLine().equals("ja")) {
+        //             break;
+        //         }
+        //     }
+        // }
+
+        // Maak een nieuw JFrame voor de chat GUI (in plaats van het inlogpaneel)
+        GUI chatGUI = new GUI(username);
+        frame.setTitle(username + "'s Chat");
+        frame.setContentPane(chatGUI); // Verander de inhoud van het frame naar de chat GUI
+        frame.revalidate(); // Herbouw het frame om de chat GUI weer te geven
 
         String filename = "ClientSide/jsonFiles/" + username + ".json";
         file = new File(filename);
