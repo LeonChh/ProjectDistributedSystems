@@ -40,6 +40,7 @@ public class ClientMain {
     private File file;
     private JsonHandler jsonHandler;
     private BulletinBoardInterface bulletinBoard;
+    private static MessageDigest digestSHA256; // SHA-256 message digest voor te hashen
     
     public static void main(String[] args) {
         try {
@@ -48,44 +49,45 @@ public class ClientMain {
             BulletinBoardInterface bulletinBoard = client.connectToServer();
             client.setBulletinBoard(bulletinBoard);
 
-            // Maak een nieuw JFrame voor de applicatie
-            JFrame frame = new JFrame("Chat System");
-            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            frame.setSize(500, 500);
+            // // Maak een nieuw JFrame voor de applicatie
+            // JFrame frame = new JFrame("Chat System");
+            // frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            // frame.setSize(500, 500);
 
-            // Start met het inlogpaneel en geef ClientMain door aan het LoginPanel
-            LoginPanel loginPanel = new LoginPanel(client, frame);
-            frame.setContentPane(loginPanel);
-            frame.setVisible(true);
+            // // Start met het inlogpaneel en geef ClientMain door aan het LoginPanel
+            // LoginPanel loginPanel = new LoginPanel(client, frame);
+            // frame.setContentPane(loginPanel);
+            // frame.setVisible(true);
             
 
-            // boolean online = true;
-            // while (online){
-            //     System.out.println("1. Bericht plaatsen");
-            //     System.out.println("2. Bericht ophalen");
-            //     System.out.println("3. Kijken of er nieuwe vrienden zijn");
-            //     System.out.println("4. Afmelden");
+            client.login(null);
+            boolean online = true;
+            while (online){
+                System.out.println("1. Bericht plaatsen");
+                System.out.println("2. Bericht ophalen");
+                System.out.println("3. Kijken of er nieuwe vrienden zijn");
+                System.out.println("4. Afmelden");
                 
-            //     String keuze = System.console().readLine();
-            //     switch (keuze) {
-            //         case "1":
-            //             System.out.println("Bericht plaatsen");
-            //             break;
-            //         case "2":
-            //             System.out.println("Bericht ophalen");
-            //             break;
-            //         case "3":
-            //             client.lookForNewFriends(bulletinBoard);
-            //             break;
-            //         case "4":
-            //             System.out.println("Afmelden");
-            //             online = false;
-            //             break;
-            //         default:
-            //             System.out.println("Ongeldige keuze");
-            //             break;
-            //     }
-            // }
+                String keuze = System.console().readLine();
+                switch (keuze) {
+                    case "1":
+                        System.out.println("Bericht plaatsen");
+                        break;
+                    case "2":
+                        System.out.println("Bericht ophalen");
+                        break;
+                    case "3":
+                        client.lookForNewFriends(bulletinBoard);
+                        break;
+                    case "4":
+                        System.out.println("Afmelden");
+                        online = false;
+                        break;
+                    default:
+                        System.out.println("Ongeldige keuze");
+                        break;
+                }
+            }
             
 
         } catch (Exception e) {
@@ -95,7 +97,13 @@ public class ClientMain {
     }
 
 
-
+    public ClientMain() {
+        try {
+            digestSHA256 = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
+    }
 
     private BulletinBoardInterface connectToServer() throws RemoteException, NotBoundException{
         System.out.println("Client connecting to server at " + host + ":" + port);
@@ -115,24 +123,24 @@ public class ClientMain {
         System.out.println("Client started");
         return bulletinBoard;
     }
-
+    
     public void login(JFrame frame) throws Exception {
-        // while (true) {
-        //     System.out.print("Geef een gebruikersnaam in: ");
-        //     username = System.console().readLine();
-        //     if (username.length() > 0) {
-        //         System.out.print("Is " + username + " je username? (ja/nee): ");
-        //         if (System.console().readLine().equals("ja")) {
-        //             break;
-        //         }
-        //     }
-        // }
+        while (true) {
+            System.out.print("Geef een gebruikersnaam in: ");
+            username = System.console().readLine();
+            if (username.length() > 0) {
+                System.out.print("Is " + username + " je username? (ja/nee): ");
+                if (System.console().readLine().equals("ja")) {
+                    break;
+                }
+            }
+        }
 
-        // Maak een nieuw JFrame voor de chat GUI (in plaats van het inlogpaneel)
-        GUI chatGUI = new GUI(username);
-        frame.setTitle(username + "'s Chat");
-        frame.setContentPane(chatGUI); // Verander de inhoud van het frame naar de chat GUI
-        frame.revalidate(); // Herbouw het frame om de chat GUI weer te geven
+        // // Maak een nieuw JFrame voor de chat GUI (in plaats van het inlogpaneel)
+        // GUI chatGUI = new GUI(username);
+        // frame.setTitle(username + "'s Chat");
+        // frame.setContentPane(chatGUI); // Verander de inhoud van het frame naar de chat GUI
+        // frame.revalidate(); // Herbouw het frame om de chat GUI weer te geven
 
         String filename = "ClientSide/jsonFiles/" + username + ".json";
         file = new File(filename);
@@ -143,7 +151,6 @@ public class ClientMain {
             jsonHandler = new JsonHandler(filename);
             createNewUser(bulletinBoard);
             addAllSubscribers(bulletinBoard);
-            System.out.println("1");
         } else {
             System.out.println("Welkom terug, " + username + "!");
             jsonHandler = new JsonHandler(filename);
@@ -152,7 +159,7 @@ public class ClientMain {
     }
 
     private void lookForNewFriends(BulletinBoardInterface bulletinBoard) throws Exception{
-        JSONArray newFriends = bulletinBoard.fetchNewFriends(username);
+        JSONArray newFriends = bulletinBoard.fetchNewFriends(hashUserName(username));
         if (newFriends == null) {
             System.out.println("Er zijn geen nieuwe vrienden.");
             return;
@@ -161,12 +168,14 @@ public class ClientMain {
             JSONObject newFriend = (JSONObject) obj;
 
             // Haal de geëncodeerde symmetrische sleutel en boodschap op
-            String encryptedSymmetricKeyBase64 = (String) newFriend.get("encryptedSymmetricKey");
+            String encryptedSymmetricKeyBase64Send = (String) newFriend.get("encryptedSymmetricKeySend");
+            String encryptedSymmetricKeyBase64Receive = (String) newFriend.get("encryptedSymmetricKeyReceive");
             String encryptedMessageBase64 = (String) newFriend.get("encryptedMessage");
             String publicKeyBase64 = (String) newFriend.get("publicKey");
 
             // Decodeer de Base64 geëncodeerde waarden naar byte arrays
-            byte[] encryptedSymmetricKey = Base64.getDecoder().decode(encryptedSymmetricKeyBase64);
+            byte[] encryptedSymmetricKeySend = Base64.getDecoder().decode(encryptedSymmetricKeyBase64Send);
+            byte[] encryptedSymmetricKeyReceive = Base64.getDecoder().decode(encryptedSymmetricKeyBase64Receive);
             byte[] encryptedMessage = Base64.getDecoder().decode(encryptedMessageBase64);
 
             byte[] publicKeyBytes = Base64.getDecoder().decode(publicKeyBase64);
@@ -178,23 +187,49 @@ public class ClientMain {
             PrivateKey privateKey = KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(privateKeyBytes));
 
             // Receiver (B) decrypts the symmetric key (K) with his private key (SK_B)
-            SecretKey decryptedSymmetricKey = decryptSymmetricKeyWithRSA(encryptedSymmetricKey, privateKey); // SK_B
+            SecretKey decryptedSymmetricKeySend = decryptSymmetricKeyWithRSA(encryptedSymmetricKeySend, privateKey); // SK_B
+            SecretKey decryptedSymmetricKeyReceive = decryptSymmetricKeyWithRSA(encryptedSymmetricKeyReceive, privateKey); // SK_B
             
             // Receiver (B) decrypts message with decrypted symmetric key (K)
-            String[] decryptedParts = decryptMessageWithAES(encryptedMessage, decryptedSymmetricKey);
+            String[] decryptedParts = decryptMessageWithAES(encryptedMessage, decryptedSymmetricKeyReceive);
             String decryptedMessage = decryptedParts[0];  // The original message
             byte[] receivedSignature = Base64.getDecoder().decode(decryptedParts[1]);  // The signature
 
             // Receiver (B) verifies the signature with sender's public key (PK_A)
             boolean isVerified = verifySignature(decryptedMessage, receivedSignature, publicKey); // PK_A
 
+            // extract alle info uit de message
+            String[] parts = decryptedMessage.split(";");
+
+            String usernameNewPerson = parts[0];
+            // String indexMe = parts[1];
+            // String tagMe = parts[2];
+            // String indexOther = parts[3];
+            // String tagOther = parts[4];
+
+            JSONObject newPersonSubscribed = new JSONObject();
+            newPersonSubscribed.put("otherIndex", Integer.parseInt(parts[3]));
+            newPersonSubscribed.put("otherTag", parts[2]);
+            newPersonSubscribed.put("myIndex", Integer.parseInt(parts[3]));
+            newPersonSubscribed.put("myTag", parts[4]);
+
             // Output the results
-            String encodedKey = Base64.getEncoder().encodeToString(decryptedSymmetricKey.getEncoded());
-            System.out.println("userName: " + decryptedMessage.split(";")[0]);
-            System.out.println("Decrypted message: " + decryptedMessage);
-            System.out.println("Symmetric key: " + encodedKey);
-            System.out.println("userName: " + decryptedMessage.split(";")[0]);
-            System.out.println("Signature verification: " + (isVerified ? "VALID" : "INVALID"));
+            String encodedKeySend = Base64.getEncoder().encodeToString(decryptedSymmetricKeySend.getEncoded());
+            String encodedKeyReceive = Base64.getEncoder().encodeToString(decryptedSymmetricKeyReceive.getEncoded());
+            
+            newPersonSubscribed.put("symmetricKeySendBase64", encodedKeySend);
+            newPersonSubscribed.put("symmetricKeyReceiveBase64", encodedKeyReceive);
+            jsonHandler.addNewPersonSubscribed(usernameNewPerson, newPersonSubscribed);
+
+            // System.out.println("userName: " + decryptedMessage.split(";")[0]);
+            // System.out.println("indexMe: " + indexMe);
+            // System.out.println("tagMe: " + tagMe);
+            // System.out.println("indexOther: " + indexOther);
+            // System.out.println("tagOther: " + tagOther);
+            // System.out.println("Symmetric key Send Base64: " + encodedKeySend);
+            // System.out.println("Symmetric key Receive Base64: " + encodedKeyReceive);
+            // System.out.println("Signature verification: " + (isVerified ? "VALID" : "INVALID"));
+            // System.out.println();
         }
     }
 
@@ -211,6 +246,11 @@ public class ClientMain {
 
         jsonObject.put("publicKey", publicKeyBase64);
         jsonObject.put("privateKey", privateKeyBase64);
+        jsonObject.put("initialFriendRequests", new JSONArray()); // ONZICHTBAAR: Nieuwe gebruiker stuurt naar iedereen info
+        jsonObject.put("newPeople", new JSONArray());  // andere gebruikers ontvangen info van nieuwe gebruiker
+        jsonObject.put("friendRequests", new JSONArray()); // de andere persoon heeft je geAdd is geklikt en je hebt een vriendschapsverzoek ontvangen
+        jsonObject.put("friends", new JSONArray()); // Vrienden
+
 
         jsonHandler.writeJsonFile(jsonObject);
         System.out.println("Keys successfully saved to the file.");
@@ -230,7 +270,7 @@ public class ClientMain {
 
         // genereer een random Integer
         for (String userNameOtherSubscriber : subscribers.keySet()) {
-            if (userNameOtherSubscriber.equals(username)) {
+            if (userNameOtherSubscriber.equals(hashUserName(username))) {
                 continue;
             }
 
@@ -242,7 +282,7 @@ public class ClientMain {
             int indexMe;
             while (true) {
                 indexMe = (int) (Math.random() * 999999);
-                if (bulletinBoard.checkIfIndexIsEmpty(indexMe)) {
+                if (bulletinBoard.reserveSpot(indexMe)) {
                     break;
                 }
                 // System.out.println("Random integer: " + randomIndex);
@@ -250,7 +290,7 @@ public class ClientMain {
             int indexOther;
             while (true) {
                 indexOther = (int) (Math.random() * 999999);
-                if (bulletinBoard.checkIfIndexIsEmpty(indexOther)) {
+                if (bulletinBoard.reserveSpot(indexOther)) {
                     break;
                 }
                 // System.out.println("Random integer: " + randomIndex);
@@ -283,7 +323,7 @@ public class ClientMain {
             newFriend.put("symmetricKeySend", encodedKeySend);
             newFriend.put("symmetricKeyReceive", encodedKeyReceive);
 
-            jsonHandler.addNewFriend(userNameOtherSubscriber, newFriend);
+            jsonHandler.initializeComOtherUsers(userNameOtherSubscriber, newFriend);
 
             // encrypts symmetric key with receiver's public key 
             String publicKeyOtherUserBase64 = subscribers.get(userNameOtherSubscriber);
@@ -318,6 +358,13 @@ public class ClientMain {
 
     public void setUsername(String username) {
         this.username = username;
+    }
+
+    private static String hashUserName(String userName) {
+        byte[] userHashBytes = digestSHA256.digest(userName.getBytes());
+        String userHashBase64 = java.util.Base64.getEncoder().encodeToString(userHashBytes);
+
+        return userHashBase64;
     }
 
     // Generate RSA Key Pair

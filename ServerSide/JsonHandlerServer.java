@@ -102,24 +102,47 @@ public class JsonHandlerServer {
         writeJsonFile(subscribers);
     }
 
-    public JSONArray fetchNewFriends(String userName) {
+    public JSONArray fetchNewFriends(String usernameHash) {
         JSONObject subscribers = readJsonFile(); // Lees het huidige JSON-bestand
         if (subscribers == null) {
             subscribers = new JSONObject(); // Maak een nieuw JSON-object als het bestand leeg is
         }
         
         // Haal het JSON-object voor de subscriber (userName) op
-        JSONObject jsonUser = (JSONObject) subscribers.get(userName);
+        JSONObject jsonUser = (JSONObject) subscribers.get(usernameHash);
         if (jsonUser == null) {
             assert false : "ERROR: jsonUser is null in fetchNewFriends";
         }
 
         JSONArray newFriends = (JSONArray) jsonUser.get("newFriends");
 
+        // Maak de lijst leeg
+        jsonUser.put("newFriends", new JSONArray());
+
+        // Schrijf het JSON-bestand bij om de wijziging op te slaan
+        writeJsonFile(subscribers);
+
         return newFriends;
     }
 
+    public void clearNewFriends(String usernameHash) {
+        JSONObject subscribers = readJsonFile(); // Lees het huidige JSON-bestand
+        if (subscribers == null) {
+            subscribers = new JSONObject(); // Maak een nieuw JSON-object als het bestand leeg is
+        }
+        
+        // Haal het JSON-object voor de subscriber (userName) op
+        JSONObject jsonUser = (JSONObject) subscribers.get(usernameHash);
+        if (jsonUser == null) {
+            assert false : "ERROR: jsonUser is null in clearNewFriends";
+        }
 
+        // Haal de lijst met 'newFriends' op
+        JSONArray newFriends = (JSONArray) jsonUser.get("newFriends");
+        jsonUser.put("newFriends", new JSONArray());
+
+        writeJsonFile(subscribers);
+    }
 
     // Methode om JSON-string te parseren
     public JSONObject parseJsonString(String jsonString) {

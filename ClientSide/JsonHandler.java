@@ -72,6 +72,34 @@ public class JsonHandler {
         writeJsonFile(jsonObject); // Schrijf het bijgewerkte JSON-object terug naar het bestand
     }
 
+    public void initializeComOtherUsers(String userNameOtherSubscriberHash, Object newRequest){
+        System.out.println("JsonHandler: initializeComOtherUsers");
+        JSONObject jsonObject = readJsonFile();
+        
+        JSONArray initialFriendRequests = (JSONArray) jsonObject.get("initialFriendRequests");
+
+        JSONObject initialFriendRequest = new JSONObject();
+        initialFriendRequest.put(userNameOtherSubscriberHash,(JSONObject) newRequest);
+
+        initialFriendRequests.add(initialFriendRequest);
+
+        writeJsonFile(jsonObject);
+    }
+
+    public void addNewPersonSubscribed(String userNameOtherPerson, Object info){
+        System.out.println("JsonHandler: addNewPersonSubscribed");
+        JSONObject jsonObject = readJsonFile();
+        
+        JSONArray initialFriendRequests = (JSONArray) jsonObject.get("newPeople");
+
+        JSONObject newPersonSubscribed = new JSONObject();
+        newPersonSubscribed.put(userNameOtherPerson,(JSONObject) info);
+
+        initialFriendRequests.add(newPersonSubscribed);
+
+        writeJsonFile(jsonObject);
+    }
+
     public void addNewFriend(String key, Object value) {
         JSONObject jsonObject = readJsonFile(); // Leest het huidige JSON-bestand
         if (jsonObject == null) {

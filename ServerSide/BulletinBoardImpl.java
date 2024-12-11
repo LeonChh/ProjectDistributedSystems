@@ -25,9 +25,9 @@ import interfaces.BulletinBoardInterface;
 
 public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBoardInterface {
     private int bulletinBoardSize;
-    ArrayList<BulletinBoardElement> bulletinBoard;
-    MessageDigest digestSHA256;
-    JsonHandlerServer jsonHandler;
+    private ArrayList<BulletinBoardElement> bulletinBoard;
+    private MessageDigest digestSHA256;
+    private JsonHandlerServer jsonHandler;
 
     public BulletinBoardImpl(int bulletinBoardSize) throws RemoteException {
         super();
@@ -45,17 +45,24 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
     }
 
     @Override
-    public boolean checkIfIndexIsEmpty(int index) {
+    public boolean reserveSpot(int index) {
         index = index % bulletinBoardSize;
-        System.out.println("Checking if index " + index + " is empty");
-        return bulletinBoard.get(index).isEmpty();
+        if (bulletinBoard.get(index).isEmpty()) {
+            bulletinBoard.get(index).setReserved();
+            System.out.println("Index " + index + " is " + bulletinBoard.get(index).getState());
+            return true;
+        }
+        return false;
     }
 
     @Override
     public boolean addMessage(int index, String message, String tag) throws RemoteException {
         index = index % bulletinBoardSize;
-        if (!bulletinBoard.get(index).isEmpty()) {
-            System.out.println("ERROR: index " + index + "is niet leeg in addMessage");
+        if (bulletinBoard.get(index).isOccupied()) {
+            System.out.println("ERROR: index " + index + "is niet leeg in addMessage, maar " + bulletinBoard.get(index).getState());
+            return false;
+        } else if (bulletinBoard.get(index).isEmpty()) {
+            assert false : "ERROR: index " + index + "is niet gereserveerd in addMessage, maar " + bulletinBoard.get(index).getState();
             return false;
         }
 
@@ -63,15 +70,15 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
         
         bulletinBoard.get(index).setTag(hashBytes);
         bulletinBoard.get(index).setMessage(message);
-        bulletinBoard.get(index).setEmpty(false);
+        bulletinBoard.get(index).setOccupied();
         return true;
     }
 
     @Override
     public String getMessage(int index, String tag) throws RemoteException {
         index = index % bulletinBoardSize;
-        if (bulletinBoard.get(index).isEmpty()) {
-            System.out.println("ERROR: index " + index + "is leeg in getMessage");
+        if (!bulletinBoard.get(index).isOccupied()) {
+            System.out.println("ERROR: index " + index + "is niet occupied in getMessage, maar " + bulletinBoard.get(index).getState() + " in getMessage");
             return null;
         }
 
@@ -84,7 +91,7 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
         }
 
         String message = bulletinBoard.get(index).getMessage();
-        bulletinBoard.get(index).setEmpty(true);
+        bulletinBoard.get(index).setEmpty();;
 
         return message;
     }
@@ -124,7 +131,7 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
     }
 
     @Override
-    public JSONArray fetchNewFriends(String username) {
-        return jsonHandler.fetchNewFriends(username);
+    public JSONArray fetchNewFriends(String usernameHash) {
+        return jsonHandler.fetchNewFriends(usernameHash); // returnt nieuwe vrienden en maakt de lijst leeg
     }
 }

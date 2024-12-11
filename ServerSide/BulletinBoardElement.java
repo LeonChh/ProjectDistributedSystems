@@ -3,16 +3,41 @@ package ServerSide;
 public class BulletinBoardElement {
     private byte[] tag;
     private String message;
-    private boolean isEmpty;
+    //private boolean isEmpty;
+    private State state;
 
     public BulletinBoardElement(byte[] tag, String message) {
         this.tag = tag;
         this.message = message;
-        this.isEmpty = true;
+        state = State.EMPTY;    
     }
 
     public boolean isEmpty() {
-        return isEmpty;
+        return state == State.EMPTY;
+    }
+
+    public boolean isOccupied() {
+        return state == State.OCCUPIED;
+    }
+
+    public boolean isReserved() {
+        return state == State.RESERVED;
+    }
+
+    public void setEmpty() {
+        state = State.EMPTY;
+    }
+
+    public void setOccupied() {
+        state = State.OCCUPIED;
+    }
+
+    public void setReserved() {
+        state = State.RESERVED;
+    }
+
+    public State getState() {
+        return state;
     }
 
     public byte[] getTag() {
@@ -31,8 +56,8 @@ public class BulletinBoardElement {
         this.message = message;
     }
 
-    public void setEmpty(boolean empty) {
-        isEmpty = empty;
-    }
+    // public void setEmpty(boolean empty) {
+    //     isEmpty = empty;
+    // }
     
 }
