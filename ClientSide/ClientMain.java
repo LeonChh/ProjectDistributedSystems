@@ -160,9 +160,6 @@ public class ClientMain {
         for (Object obj : newFriends) {
             JSONObject newFriend = (JSONObject) obj;
 
-            // Haal de naam van de vriend op
-            String nameNewFriend = (String) newFriend.get("name");
-
             // Haal de geëncodeerde symmetrische sleutel en boodschap op
             String encryptedSymmetricKeyBase64 = (String) newFriend.get("encryptedSymmetricKey");
             String encryptedMessageBase64 = (String) newFriend.get("encryptedMessage");
@@ -193,9 +190,10 @@ public class ClientMain {
 
             // Output the results
             String encodedKey = Base64.getEncoder().encodeToString(decryptedSymmetricKey.getEncoded());
-            System.out.println("New friend: " + nameNewFriend);
-            System.out.println("Symmetric key: " + encodedKey);
+            System.out.println("userName: " + decryptedMessage.split(";")[0]);
             System.out.println("Decrypted message: " + decryptedMessage);
+            System.out.println("Symmetric key: " + encodedKey);
+            System.out.println("userName: " + decryptedMessage.split(";")[0]);
             System.out.println("Signature verification: " + (isVerified ? "VALID" : "INVALID"));
         }
     }
@@ -276,22 +274,27 @@ public class ClientMain {
             byte[] signedMessage = signMessage(originalMessage, privateKey); // SK_A
 
             // encrypts signed message with symmetric key
-            SecretKey symmetricKey = generateAESKey();
-            byte[] encryptedMessage = encryptMessageWithAES(originalMessage, signedMessage, symmetricKey);
+            SecretKey symmetricKeySend = generateAESKey();
+            SecretKey symmetricKeyReceive = generateAESKey();
+            byte[] encryptedMessage = encryptMessageWithAES(originalMessage, signedMessage, symmetricKeySend);
 
-            String encodedKey = Base64.getEncoder().encodeToString(symmetricKey.getEncoded());
-            newFriend.put("symmetricKey", encodedKey);
+            String encodedKeySend = Base64.getEncoder().encodeToString(symmetricKeySend.getEncoded());
+            String encodedKeyReceive = Base64.getEncoder().encodeToString(symmetricKeyReceive.getEncoded());
+            newFriend.put("symmetricKeySend", encodedKeySend);
+            newFriend.put("symmetricKeyReceive", encodedKeyReceive);
+
             jsonHandler.addNewFriend(userNameOtherSubscriber, newFriend);
 
             // encrypts symmetric key with receiver's public key 
             String publicKeyOtherUserBase64 = subscribers.get(userNameOtherSubscriber);
             byte[] publicKeyOtherUserBytes = Base64.getDecoder().decode(publicKeyOtherUserBase64);
             PublicKey publicKeyOther = KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(publicKeyOtherUserBytes));
-            byte[] encryptedSymmetricKey = encryptSymmetricKeyWithRSA(symmetricKey, publicKeyOther);
+            byte[] encryptedSymmetricKeySend = encryptSymmetricKeyWithRSA(symmetricKeySend, publicKeyOther);
+            byte[] encryptedSymmetricKeyReceive = encryptSymmetricKeyWithRSA(symmetricKeyReceive, publicKeyOther);
         
             // send key to user
             String publicKeyBase64 = (String) jsonObject.get("publicKey");
-            bulletinBoard.addNewFriendTo(userNameOtherSubscriber, username, Base64.getEncoder().encodeToString(encryptedSymmetricKey), Base64.getEncoder().encodeToString(encryptedMessage), publicKeyBase64);
+            bulletinBoard.addNewFriendTo(userNameOtherSubscriber, Base64.getEncoder().encodeToString(encryptedSymmetricKeyReceive), Base64.getEncoder().encodeToString(encryptedSymmetricKeySend), Base64.getEncoder().encodeToString(encryptedMessage), publicKeyBase64);
         }
             
     }

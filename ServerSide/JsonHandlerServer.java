@@ -73,11 +73,11 @@ public class JsonHandlerServer {
         newSubcriber.put("newFriends", new JSONArray());
         subscribers.put(userName, newSubcriber); // Voeg de nieuwe sleutel/waarde toe
         
-        writeJsonFile(subscribers); // Schrijf het bijgewerkte JSON-object terug naar het bestand
+        writeJsonFile(subscribers); // ScSendhrijf het bijgewerkte JSON-object terug naar het bestand
     }
 
     // Methode om een element toe te voegen aan het JSON-bestand
-    public void addNewFriendTo(String userName, String nameNewFriend, String encryptedSymmetricKeyBase64, String encryptedMessageBase64, String publicKeyBase64) {
+    public void addNewFriendTo(String userName, String encryptedSymmetricKeyBase64Send, String encryptedSymmetricKeyBase64Receive, String encryptedMessageBase64, String publicKeyBase64) {
         JSONObject subscribers = readJsonFile(); // Lees het huidige JSON-bestand
         if (subscribers == null) {
             subscribers = new JSONObject(); // Maak een nieuw JSON-object als het bestand leeg is
@@ -92,8 +92,8 @@ public class JsonHandlerServer {
         JSONArray newFriends = (JSONArray) jsonUser.get("newFriends");
         
         JSONObject newFriend = new JSONObject();
-        newFriend.put("name", nameNewFriend);
-        newFriend.put("encryptedSymmetricKey", encryptedSymmetricKeyBase64);
+        newFriend.put("encryptedSymmetricKeySend", encryptedSymmetricKeyBase64Send);
+        newFriend.put("encryptedSymmetricKeyReceive", encryptedSymmetricKeyBase64Receive);
         newFriend.put("encryptedMessage", encryptedMessageBase64);
         newFriend.put("publicKey", publicKeyBase64);
 

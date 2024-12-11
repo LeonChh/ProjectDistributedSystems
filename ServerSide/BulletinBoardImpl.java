@@ -91,7 +91,10 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
 
     @Override
     public boolean newSubscriber(String username, String publicKeyBase64) throws RemoteException {
-        jsonHandler.addToNewSubscriber(username, publicKeyBase64);
+        // hash the username
+        byte[] userHashBytes = digestSHA256.digest(username.getBytes());
+        String userHashBase64 = java.util.Base64.getEncoder().encodeToString(userHashBytes);
+        jsonHandler.addToNewSubscriber(userHashBase64, publicKeyBase64);
         return true;
     }
 
@@ -116,8 +119,8 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
     }
 
     @Override
-    public void addNewFriendTo(String username, String nameFriend, String encryptedSymmetricKeyBase64, String encryptedMessageBase64, String publicKeyBase64) {
-        jsonHandler.addNewFriendTo(username, nameFriend, encryptedSymmetricKeyBase64, encryptedMessageBase64, publicKeyBase64);
+    public void addNewFriendTo(String username, String encryptedSymmetricKeyBase64Send, String encryptedSymmetricKeyBase64Receive, String encryptedMessageBase64, String publicKeyBase64) {
+        jsonHandler.addNewFriendTo(username, encryptedSymmetricKeyBase64Send, encryptedSymmetricKeyBase64Receive, encryptedMessageBase64, publicKeyBase64);
     }
 
     @Override
