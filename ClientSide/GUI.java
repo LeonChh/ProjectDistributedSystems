@@ -23,8 +23,41 @@ public class GUI extends JPanel {
     private static int panelWidth = 1200;
 
     // Maak de ActionListeners voor de knoppen
-    private ActionListener addListenerAdd = e -> addNewFriend(((JButton) e.getSource()).getText());
-    private ActionListener removeListenerNotAdd = e -> removeNewPerson(((JButton) e.getSource()).getText());
+    private ActionListener addListenerAdd = e -> {
+        try {
+            addNewFriend(((JButton) e.getSource()).getClientProperty("userName").toString());
+        } catch (Exception e1) {
+            e1.printStackTrace();
+        }
+    };
+    private ActionListener removeListenerNotAdd = e -> {
+        try {
+            removeNewPerson(((JButton) e.getSource()).getClientProperty("userName").toString());
+        } catch (Exception e1) {
+            e1.printStackTrace();
+        }
+    };
+    private ActionListener acceptListener = e -> {
+        try {
+            acceptRequest(((JButton) e.getSource()).getClientProperty("userName").toString());
+        } catch (Exception e1) {
+            e1.printStackTrace();
+        }
+    };
+    private ActionListener declineListener = e -> {
+        try {
+            declineRequest(((JButton) e.getSource()).getClientProperty("userName").toString());
+        } catch (Exception e1) {
+            e1.printStackTrace();
+        }
+    };
+    private ActionListener chatListener = e -> {
+        try {
+            startChat(((JButton) e.getSource()).getClientProperty("userName").toString());
+        } catch (Exception e1) {
+            e1.printStackTrace();
+        }
+    };
 
     public GUI(String username, ClientMain client) {
         this.username = username;
@@ -100,23 +133,39 @@ public class GUI extends JPanel {
             panel.add(notificationsArea, BorderLayout.CENTER);
 
         } else if (title.equals("Friends")) {
-            // Voeg een tekstveld toe voor de vrienden
-            ArrayList<String> friends = jsonHandler.getFriends();
-            String[] friendsArray = friends.toArray(new String[0]);
-            JList<String> list = new JList<>(friendsArray);
-            JScrollPane scrollPane = new JScrollPane(list);
+            ArrayList<String> friends = jsonHandler.getUserNamesOfList("friends");
+
+            // Maak een NewPeopleList met de nieuwe mensen
+            NewPeopleList friendsList = new NewPeopleList(friends, chatListener, null, PersonWithButtons.ListElementTypes.CHAT);
+
+            // Plaats de NewPeopleList in een JScrollPane zodat het scrollbaar is
+            JScrollPane scrollPane = new JScrollPane(friendsList);
+
+            // Voeg het scrollPane toe aan het hoofdpaneel
             panel.add(scrollPane, BorderLayout.CENTER);
+
+            // Herteken het panel om te zorgen dat de UI wordt bijgewerkt
+            panel.revalidate();
+            panel.repaint();
 
         } else if (title.equals("Requests")) {
-            // Voeg een tekstveld toe voor friend requests
-            ArrayList<String> requests = jsonHandler.getRequests();
-            String[] requestsArray = requests.toArray(new String[0]);
-            JList<String> list = new JList<>(requestsArray);
-            JScrollPane scrollPane = new JScrollPane(list);
+            ArrayList<String> requests = jsonHandler.getUserNamesOfList("friendRequests");
+
+            // Maak een NewPeopleList met de nieuwe mensen
+            NewPeopleList newPeopleList = new NewPeopleList(requests, acceptListener, declineListener, PersonWithButtons.ListElementTypes.ACCEPT);
+
+            // Plaats de NewPeopleList in een JScrollPane zodat het scrollbaar is
+            JScrollPane scrollPane = new JScrollPane(newPeopleList);
+
+            // Voeg het scrollPane toe aan het hoofdpaneel
             panel.add(scrollPane, BorderLayout.CENTER);
 
+            // Herteken het panel om te zorgen dat de UI wordt bijgewerkt
+            panel.revalidate();
+            panel.repaint();
+
         } else if (title.equals("New People")) {
-            ArrayList<String> newPeople = jsonHandler.getNewPeople();
+            ArrayList<String> newPeople = jsonHandler.getUserNamesOfList("newPeople");
 
             // Maak een NewPeopleList met de nieuwe mensen
             NewPeopleList newPeopleList = new NewPeopleList(newPeople, addListenerAdd, removeListenerNotAdd, PersonWithButtons.ListElementTypes.ADD);
@@ -136,70 +185,89 @@ public class GUI extends JPanel {
         return panel;
     }
 
+    public void refreshAllPanels() {
+        try {
+            refreshPanel("Friends");
+            refreshPanel("Requests");
+            refreshPanel("New People");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     // Methode voor de refresh actie
     private void refreshPanel(String panelTitle) throws Exception {
         if (panelTitle.equals("Notifications")) {
             System.out.println("No new notifications");;
         } else if (panelTitle.equals("Friends")) {
-            ArrayList<String> friends = jsonHandler.getFriends();
-        
-            // Haal het friendsPanel op (index 1 is de 2de kolom)
-            JPanel friendsPanel = (JPanel) getComponent(1);
+            ArrayList<String> friends = jsonHandler.getUserNamesOfList("friends");  // Verkrijg de nieuwe mensen
 
-            // Haal de bestaande JScrollPane op, die de JList bevat
-            JScrollPane scrollPane = (JScrollPane) friendsPanel.getComponent(1);  // Veronderstel dat de JScrollPane op index 1 staat
-            JList<String> list = (JList<String>) scrollPane.getViewport().getView();  // Verkrijg de JList
+            // Haal het newPeoplePanel op, index 3 is de 4de kolom
+            JPanel friendsPanel = (JPanel) getComponent(1); 
 
-            // Zet de nieuwe lijst op de JList
-            String[] friendsArray = friends.toArray(new String[0]);
-            list.setListData(friendsArray);  // Werk de JList bij
+            // Haal de bestaande JScrollPane op die de JList bevat
+            JScrollPane scrollPaneFriends = (JScrollPane) friendsPanel.getComponent(1);  // Veronderstel dat de JScrollPane op index 1 staat
+            NewPeopleList friendsList = (NewPeopleList) scrollPaneFriends.getViewport().getView();  // Verkrijg de NewPeopleList
+            friendsList.setNewPeopleList(friends, chatListener, null, PersonWithButtons.ListElementTypes.CHAT);  // Werk de JList bij
 
-            // Optioneel: herteken het paneel
-            friendsPanel.revalidate();  
-            friendsPanel.repaint();  
+            scrollPaneFriends.revalidate();  // Herteken de JScrollPane
+            scrollPaneFriends.repaint();     // Herverf de JScrollPane
 
         } else if (panelTitle.equals("Requests")) {
-            ArrayList<String> requests = jsonHandler.getRequests();
+            ArrayList<String> requests = jsonHandler.getUserNamesOfList("friendRequests");  // Verkrijg de nieuwe mensen
 
-            // Haal het requestsPanel op (index 2 is de 3de kolom)
-            JPanel requestsPanel = (JPanel) getComponent(2);
+            // Haal het newPeoplePanel op, index 3 is de 4de kolom
+            JPanel requestsPanel = (JPanel) getComponent(2); 
 
-            // Haal de bestaande JScrollPane op, die de JList bevat
-            JScrollPane scrollPane = (JScrollPane) requestsPanel.getComponent(1);  // Veronderstel dat de JScrollPane op index 1 staat
-            JList<String> list = (JList<String>) scrollPane.getViewport().getView();  // Verkrijg de JList
+            // Haal de bestaande JScrollPane op die de JList bevat
+            JScrollPane scrollPaneRequests = (JScrollPane) requestsPanel.getComponent(1);  // Veronderstel dat de JScrollPane op index 1 staat
+            NewPeopleList requestsList = (NewPeopleList) scrollPaneRequests.getViewport().getView();  // Verkrijg de NewPeopleList
+            requestsList.setNewPeopleList(requests, acceptListener, declineListener, PersonWithButtons.ListElementTypes.ACCEPT);  // Werk de JList bij
 
-            // Zet de nieuwe lijst op de JList
-            String[] requestsArray = requests.toArray(new String[0]);
-            list.setListData(requestsArray);  // Werk de JList bij
-
-            // Optioneel: herteken het paneel
-            requestsPanel.revalidate();  
-            requestsPanel.repaint(); 
+            scrollPaneRequests.revalidate();  // Herteken de JScrollPane
+            scrollPaneRequests.repaint();     // Herverf de JScrollPane
 
         } else if (panelTitle.equals("New People")) {
             // Haal de nieuwe mensen opnieuw op
             client.lookForNewFriends(); // Dit zorgt ervoor dat nieuwe mensen worden opgehaald
-            ArrayList<String> newPeople = jsonHandler.getNewPeople();  // Verkrijg de nieuwe mensen
+            ArrayList<String> newPeople = jsonHandler.getUserNamesOfList("newPeople");  // Verkrijg de nieuwe mensen
 
             // Haal het newPeoplePanel op, index 3 is de 4de kolom
             JPanel newPeoplePanel = (JPanel) getComponent(3); 
 
             // Haal de bestaande JScrollPane op die de JList bevat
-            JScrollPane scrollPane = (JScrollPane) newPeoplePanel.getComponent(1);  // Veronderstel dat de JScrollPane op index 1 staat
-            NewPeopleList newPeopleList = (NewPeopleList) scrollPane.getViewport().getView();  // Verkrijg de NewPeopleList
+            JScrollPane scrollPaneNewPeople = (JScrollPane) newPeoplePanel.getComponent(1);  // Veronderstel dat de JScrollPane op index 1 staat
+            NewPeopleList newPeopleList = (NewPeopleList) scrollPaneNewPeople.getViewport().getView();  // Verkrijg de NewPeopleList
             newPeopleList.setNewPeopleList(newPeople, addListenerAdd, removeListenerNotAdd, PersonWithButtons.ListElementTypes.ADD);  // Werk de JList bij
 
-            scrollPane.revalidate();  // Herteken de JScrollPane
-            scrollPane.repaint();     // Herverf de JScrollPane
+            scrollPaneNewPeople.revalidate();  // Herteken de JScrollPane
+            scrollPaneNewPeople.repaint();     // Herverf de JScrollPane
         }
     }
 
-    private void addNewFriend(String person) {
-        sendNotification(person + " is toegevoegd aan je vriendenlijst");
+    private void addNewFriend(String person) throws Exception {
+        sendNotification("Er is een vriendschapsverzoek gestuurd naar " + person);
+        client.sendFriendRequest(person);
     }
 
-    private void removeNewPerson(String person) {
+    private void removeNewPerson(String person) throws Exception {
         sendNotification(person + " is verwijderd uit de lijst van nieuwe mensen");
+        client.removePersonOutNewPeople(person);
+    }
+
+    private void acceptRequest(String person) throws Exception {
+        sendNotification("Vriendschapsverzoek van " + person + " is geaccepteerd");
+        client.acceptFriendRequest(person);
+    }
+
+    private void declineRequest(String person) throws Exception {
+        sendNotification("Vriendschapsverzoek van " + person + " is geweigerd");
+        client.declineFriendRequest(person);
+    }
+
+    private void startChat(String person) throws Exception {
+        sendNotification("Chat gestart met " + person);
+        client.startChat(person);
     }
 
     // Methode om het bericht te verzenden

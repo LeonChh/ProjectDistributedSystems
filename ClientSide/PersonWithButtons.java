@@ -2,7 +2,9 @@ package ClientSide;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.lang.reflect.Type;
 
 public class PersonWithButtons {
     private String name;
@@ -20,13 +22,20 @@ public class PersonWithButtons {
         this.name = name;
         if (type == ListElementTypes.ADD) {
             this.buttonOne = new JButton("+");
+            this.buttonOne.putClientProperty("userName", name);
             this.buttonTwo = new JButton("X");
+            this.buttonTwo.putClientProperty("userName", name);
         } else if (type == ListElementTypes.ACCEPT) {
             this.buttonOne = new JButton("✓");
+            this.buttonOne.putClientProperty("userName", name);
             this.buttonTwo = new JButton("X");
+            this.buttonTwo.putClientProperty("userName", name);
         } else if (type == ListElementTypes.CHAT) {
             this.buttonOne = new JButton("Chat");
+            this.buttonOne.putClientProperty("userName", name);
         }
+
+        
 
         this.type = type;
 

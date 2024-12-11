@@ -75,82 +75,163 @@ public class JsonHandler {
         writeJsonFile(jsonObject); // Schrijf het bijgewerkte JSON-object terug naar het bestand
     }
 
-    public void initializeComOtherUsers(String userNameOtherSubscriberHash, Object newRequest){
-        System.out.println("JsonHandler: initializeComOtherUsers");
-        JSONObject jsonObject = readJsonFile();
-        
-        JSONArray initialFriendRequests = (JSONArray) jsonObject.get("initialFriendRequests");
-
-        JSONObject initialFriendRequest = new JSONObject();
-        initialFriendRequest.put(userNameOtherSubscriberHash,(JSONObject) newRequest);
-
-        initialFriendRequests.add(initialFriendRequest);
-
-        writeJsonFile(jsonObject);
-    }
-
-    public void addNewPersonSubscribed(String userNameOtherPerson, Object info){
-        System.out.println("JsonHandler: addNewPersonSubscribed");
-        JSONObject jsonObject = readJsonFile();
-        
-        JSONArray initialFriendRequests = (JSONArray) jsonObject.get("newPeople");
-
-        JSONObject newPersonSubscribed = new JSONObject();
-        newPersonSubscribed.put(userNameOtherPerson,(JSONObject) info);
-
-        initialFriendRequests.add(newPersonSubscribed);
-
-        writeJsonFile(jsonObject);
-    }
-
-    public void addNewFriend(String key, Object value) {
+    public void addNewUserName(String userName) {
         JSONObject jsonObject = readJsonFile(); // Leest het huidige JSON-bestand
         if (jsonObject == null) {
             jsonObject = new JSONObject(); // Maak een nieuw JSON-object als het bestand leeg is
         }
         
-        jsonObject.put(key, value); // Voeg de nieuwe sleutel/waarde toe
+        JSONArray userNames = (JSONArray) jsonObject.get("allUserNames");
+        userNames.add(userName);
         
         writeJsonFile(jsonObject); // Schrijf het bijgewerkte JSON-object terug naar het bestand
     }
 
+    public JSONObject removeUserFromList(String userName, String listName) {
+        JSONObject jsonObject = readJsonFile();
+        JSONArray listGiven = (JSONArray) jsonObject.get(listName);
 
-    public ArrayList<String> getNewPeople(){
-        ArrayList<String> newPeople = new ArrayList<>();
+        System.out.println("removeUserFromList: user to remove: " + userName);
+
+        for (int i = 0; i < listGiven.size(); i++) {
+            JSONObject listElement = (JSONObject) listGiven.get(i);
+            for (Object key : listElement.keySet()) {
+                String userNameKey = (String) key;
+                if (userNameKey.equals(userName)) {
+                    JSONObject friendInfo = (JSONObject) listElement.get(userName);
+                    listGiven.remove(i);
+                    System.out.println("removeUserFromList: removed" + userName);
+                    writeJsonFile(jsonObject);
+                    return friendInfo;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public void addUserToList(String userName, Object info, String listName) {
+        JSONObject jsonObject = readJsonFile();
+        JSONArray listGiven = (JSONArray) jsonObject.get(listName);
+
+        JSONObject newPersonSubscribed = new JSONObject();
+        newPersonSubscribed.put(userName,(JSONObject) info);
+
+        listGiven.add(newPersonSubscribed);
+
+        writeJsonFile(jsonObject);
+    }
+
+    public String getSymmetricKeyReceiveFromList(String userName, String listName) {
+        JSONObject jsonObject = readJsonFile();
+        JSONArray selectedList = (JSONArray) jsonObject.get(listName);
+
+        for (int i = 0; i < selectedList.size(); i++) {
+            JSONObject listElement = (JSONObject) selectedList.get(i);
+            for (Object key : listElement.keySet()) {
+                String userNameKey = (String) key;
+                if (userNameKey.equals(userName)) {
+                    JSONObject friendInfo = (JSONObject) listElement.get(userName);
+                    return (String) friendInfo.get("symmetricKeyReceive");
+                }
+            }
+        }
+        assert false : "ERROR: getSymmetricKeyReceive: " + userName + " not found";
+        return null;
+    }
+
+    public void updateSendInfo(String usernameGiven, int nextSendIndex, String nextSendTag, String derivedSymKey, String listName) {
+        JSONObject jsonObject = readJsonFile();
+        JSONArray listGiven = (JSONArray) jsonObject.get(listName);
+
+        for (int i = 0; i < listGiven.size(); i++) {
+            JSONObject friend = (JSONObject) listGiven.get(i);
+            for (Object key : friend.keySet()) {
+                String userName = (String) key;
+                System.out.println("in updateSendInfo username: " + userName + ", usernameSearch: " + usernameGiven);
+                if (userName.equals(usernameGiven)) {
+                    JSONObject friendInfo = (JSONObject) friend.get(userName);
+                    friendInfo.put("sendIndex", nextSendIndex);
+                    friendInfo.put("sendTag", nextSendTag);
+                    friendInfo.put("symmetricKeySend", derivedSymKey);
+                }
+            }
+        }
+
+        writeJsonFile(jsonObject);
+    }
+
+    public void updateReceiveInfo(String username, int nextSendIndex, String nextSendTag, String derivedSymKey, String listName) {
+        JSONObject jsonObject = readJsonFile();
+        JSONArray listGiven = (JSONArray) jsonObject.get(listName);
+
+        for (int i = 0; i < listGiven.size(); i++) {
+            JSONObject friend = (JSONObject) listGiven.get(i);
+            for (Object key : friend.keySet()) {
+                String userName = (String) key;
+                if (userName.equals(username)) {
+                    JSONObject friendInfo = (JSONObject) friend.get(userName);
+                    friendInfo.put("receiveIndex", nextSendIndex);
+                    friendInfo.put("receiveTag", nextSendTag);
+                    friendInfo.put("symmetricKeyReceive", derivedSymKey);
+                }
+            }
+        }
+
+        writeJsonFile(jsonObject);
+    }
+
+    public ArrayList<String> getUserNamesOfList(String listName){
+        ArrayList<String> newAskedList = new ArrayList<>();
 
         JSONObject jsonObject = readJsonFile();
-        JSONArray newPeopleJson = (JSONArray) jsonObject.get("newPeople");
+        JSONArray newAskedListJson = (JSONArray) jsonObject.get(listName);
+
+        for (int i = 0; i < newAskedListJson.size(); i++) {
+            JSONObject newListElement = (JSONObject) newAskedListJson.get(i);
+            for (Object key : newListElement.keySet()) {
+                String userName = (String) key;
+                newAskedList.add(userName);
+            }
+        }
+
+        return newAskedList;
+    }
+
+    public ArrayList<JSONObject> getList(String listName){
+        ArrayList<JSONObject> newAskedList = new ArrayList<>();
+
+        JSONObject jsonObject = readJsonFile();
+        JSONArray newAskedListJson = (JSONArray) jsonObject.get(listName);
+
+        for (int i = 0; i < newAskedListJson.size(); i++) {
+            newAskedList.add((JSONObject) newAskedListJson.get(i));
+            
+        }
+
+        System.out.println("JsonHandler: getList " + listName + " : " + newAskedList);
+
+        return newAskedList;
+    }
+
+    public JSONObject getPersonOfList(String userName, String listName){ 
+        JSONObject jsonObject = readJsonFile();
+        JSONArray newPeopleJson = (JSONArray) jsonObject.get(listName);
+
+        System.out.println("Person searching for in list " + listName + " : " + userName);
+        System.out.println("getPersonOfList: " + newPeopleJson);
 
         for (int i = 0; i < newPeopleJson.size(); i++) {
             JSONObject newPerson = (JSONObject) newPeopleJson.get(i);
             for (Object key : newPerson.keySet()) {
-                String userName = (String) key;
-                newPeople.add(userName);
+                String userNameKey = (String) key;
+                if (userNameKey.equals(userName)) {
+                    return (JSONObject) newPerson.get(userName);
+                }
             }
         }
-
-        System.out.println("JsonHandler: getInitialFriendRequests: " + newPeople);
-
-        return newPeople;
-    }
-
-    public ArrayList<String> getRequests(){
-        ArrayList<String> requests = new ArrayList<>();
-
-        JSONObject jsonObject = readJsonFile();
-        JSONArray requestsJson = (JSONArray) jsonObject.get("friendRequests");
-
-        for (int i = 0; i < requestsJson.size(); i++) {
-            JSONObject request = (JSONObject) requestsJson.get(i);
-            for (Object key : request.keySet()) {
-                String userName = (String) key;
-                requests.add(userName);
-            }
-        }
-
-        System.out.println("JsonHandler: getRequests: " + requests);
-
-        return requests;
+        assert false : "ERROR: getNewPerson: " + userName + " not found";
+        return null;
     }
 
     public ArrayList<String> getFriends(){

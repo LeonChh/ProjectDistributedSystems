@@ -46,52 +46,59 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
 
     @Override
     public boolean reserveSpot(int index) {
-        index = index % bulletinBoardSize;
-        if (bulletinBoard.get(index).isEmpty()) {
-            bulletinBoard.get(index).setReserved();
-            System.out.println("Index " + index + " is " + bulletinBoard.get(index).getState());
+        int indexAfterModulo = index % bulletinBoardSize;
+        if (bulletinBoard.get(indexAfterModulo).isEmpty()) {
+            bulletinBoard.get(indexAfterModulo).setReserved();
+            System.out.println("Spot reserved at index " + index + ", state is " + bulletinBoard.get(indexAfterModulo).getState());
             return true;
         }
+        
         return false;
     }
 
     @Override
     public boolean addMessage(int index, String message, String tag) throws RemoteException {
-        index = index % bulletinBoardSize;
-        if (bulletinBoard.get(index).isOccupied()) {
-            System.out.println("ERROR: index " + index + "is niet leeg in addMessage, maar " + bulletinBoard.get(index).getState());
+        int indexAfterModulo  = index % bulletinBoardSize;
+
+        if (bulletinBoard.get(indexAfterModulo).isOccupied()) {
+            System.out.println("ERROR: index " + index + "is niet leeg in addMessage, maar " + bulletinBoard.get(indexAfterModulo).getState());
             return false;
-        } else if (bulletinBoard.get(index).isEmpty()) {
-            assert false : "ERROR: index " + index + "is niet gereserveerd in addMessage, maar " + bulletinBoard.get(index).getState();
+        } else if (bulletinBoard.get(indexAfterModulo).isEmpty()) {
+            assert false : "ERROR: index " + index + "is niet gereserveerd in addMessage, maar " + bulletinBoard.get(indexAfterModulo).getState();
             return false;
         }
 
         byte[] hashBytes = digestSHA256.digest(tag.getBytes());
         
-        bulletinBoard.get(index).setTag(hashBytes);
-        bulletinBoard.get(index).setMessage(message);
-        bulletinBoard.get(index).setOccupied();
+        bulletinBoard.get(indexAfterModulo).setTag(hashBytes);
+        bulletinBoard.get(indexAfterModulo).setMessage(message);
+        bulletinBoard.get(indexAfterModulo).setOccupied();
+
+        System.out.println("message added to index " + index + ", state is " + bulletinBoard.get(indexAfterModulo).getState());
         return true;
     }
 
     @Override
     public String getMessage(int index, String tag) throws RemoteException {
-        index = index % bulletinBoardSize;
-        if (!bulletinBoard.get(index).isOccupied()) {
-            System.out.println("ERROR: index " + index + "is niet occupied in getMessage, maar " + bulletinBoard.get(index).getState() + " in getMessage");
+        int indexAfterModulo = index % bulletinBoardSize;
+        
+        if (!bulletinBoard.get(indexAfterModulo).isOccupied()) {
+            // System.out.println("ERROR: index " + index + "is niet occupied in getMessage, maar " + bulletinBoard.get(index).getState() + " in getMessage");
             return null;
         }
 
         byte[] tagBytesReceiver = digestSHA256.digest(tag.getBytes());
-        byte[] tagBytesSender = bulletinBoard.get(index).getTag();
+        byte[] tagBytesSender = bulletinBoard.get(indexAfterModulo).getTag();
 
         if (!Arrays.equals(tagBytesReceiver, tagBytesSender)) {
-            System.out.println("ERROR: tag " + tag + " komt niet overeen met tag " + bulletinBoard.get(index).getTag() + " in getMessage");
+            System.out.println("ERROR: tag " + tag + " komt niet overeen met tag " + bulletinBoard.get(indexAfterModulo).getTag() + " in getMessage");
             return null;
         }
 
-        String message = bulletinBoard.get(index).getMessage();
-        bulletinBoard.get(index).setEmpty();;
+        String message = bulletinBoard.get(indexAfterModulo).getMessage();
+        bulletinBoard.get(indexAfterModulo).setEmpty();
+
+        System.out.println("message retrieved from index " + index + ", state is " + bulletinBoard.get(indexAfterModulo).getState());
 
         return message;
     }
@@ -133,5 +140,12 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
     @Override
     public JSONArray fetchNewFriends(String usernameHash) {
         return jsonHandler.fetchNewFriends(usernameHash); // returnt nieuwe vrienden en maakt de lijst leeg
+    }
+
+    @Override
+    public void clearSpot(int index) {
+        int indexAfterModulo = index % bulletinBoardSize;
+        bulletinBoard.get(indexAfterModulo).setEmpty();
+        System.out.println("Spot cleared at index " + index + ", state is " + bulletinBoard.get(indexAfterModulo).getState());
     }
 }

@@ -12,17 +12,24 @@ import java.rmi.registry.Registry;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 
 import java.nio.charset.StandardCharsets;
 import java.security.*;
+import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Random;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import javax.swing.*;
 
@@ -42,8 +49,14 @@ public class ClientMain {
     private BulletinBoardInterface bulletinBoard;
     private static MessageDigest digestSHA256; // SHA-256 message digest voor te hashen
 
+    private HashMap<Integer, String> indexesToFetch = new HashMap<>();
+
+    private ScheduledExecutorService scheduler;
+
     private static int panelWidth = 1200;
     private static int panelHight = 800;
+    private GUI chatGUI;
+    private boolean change = true;
     
     public static void main(String[] args) {
         try {
@@ -66,7 +79,6 @@ public class ClientMain {
 
             // Maak het frame zichtbaar
             frame.setVisible(true);
-            
 
         } catch (Exception e) {
             System.err.println("Client exception: " + e.getMessage());
@@ -102,6 +114,7 @@ public class ClientMain {
         return bulletinBoard;
     }
     
+    @SuppressWarnings("unchecked")
     public void login(JFrame frame) throws Exception {
         String filename = "ClientSide/jsonFiles/" + username + ".json";
         file = new File(filename);
@@ -113,7 +126,7 @@ public class ClientMain {
             addAllSubscribers(bulletinBoard);
 
             // Maak een nieuw JFrame voor de chat GUI (in plaats van het inlogpaneel)
-            GUI chatGUI = new GUI(username, this);
+            this.setGUI(new GUI(username, this));
             frame.setTitle(username + "'s Chat");
             frame.setContentPane(chatGUI); // Verander de inhoud van het frame naar de chat GUI
             frame.revalidate(); // Herbouw het frame om de chat GUI weer te geven
@@ -126,7 +139,7 @@ public class ClientMain {
             lookForNewFriends();
 
             // Maak een nieuw JFrame voor de chat GUI (in plaats van het inlogpaneel)
-            GUI chatGUI = new GUI(username, this);
+            this.setGUI(new GUI(username, this));
             frame.setTitle(username + "'s Chat");
             frame.setContentPane(chatGUI); // Verander de inhoud van het frame naar de chat GUI
             frame.revalidate(); // Herbouw het frame om de chat GUI weer te geven
@@ -135,12 +148,74 @@ public class ClientMain {
 
             chatGUI.sendNotification("Welkom terug, " + username + "!");
         }
+
+        ArrayList<JSONObject> allUsersWeNeedAHandShake = jsonHandler.getList("waitingHandShake");
+        for (JSONObject userObject : allUsersWeNeedAHandShake) {
+            String userNameOtherSubscriber = (String) userObject.keySet().iterator().next();
+            //String userNameOtherSubscriber = (String) userObject.get("username");
+
+            JSONObject userInfo = (JSONObject) userObject.get(userNameOtherSubscriber);
+
+            System.out.println("User: " + userNameOtherSubscriber);
+            int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
+            
+            String receiveTag = (String) userInfo.get("receiveTag");
+            
+            indexesToFetch.put(receiveIndex, receiveTag + ";" + userNameOtherSubscriber + ";waitingHandShake");
+        }
+
+        ArrayList<JSONObject> allNewPeople = jsonHandler.getList("newPeople");
+        for (JSONObject userObject : allNewPeople) {
+            String userNameOtherSubscriber = (String) userObject.keySet().iterator().next();
+            //String userNameOtherSubscriber = (String) userObject.get("username");
+
+            JSONObject userInfo = (JSONObject) userObject.get(userNameOtherSubscriber);
+
+            System.out.println("User: " + userNameOtherSubscriber);
+            int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
+            
+            String receiveTag = (String) userInfo.get("receiveTag");
+            
+            indexesToFetch.put(receiveIndex, receiveTag + ";" + userNameOtherSubscriber + ";newPeople");
+        }
+
+        ArrayList<JSONObject> usersNotAnsweredRequestYet = jsonHandler.getList("inAfwachting");
+        for (JSONObject userObject : usersNotAnsweredRequestYet) {
+            String userNameOtherSubscriber = (String) userObject.keySet().iterator().next();
+            //String userNameOtherSubscriber = (String) userObject.get("username");
+
+            JSONObject userInfo = (JSONObject) userObject.get(userNameOtherSubscriber);
+
+            System.out.println("User: " + userNameOtherSubscriber);
+            int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
+            
+            String receiveTag = (String) userInfo.get("receiveTag");
+            
+            indexesToFetch.put(receiveIndex, receiveTag + ";" + userNameOtherSubscriber + ";inAfwachting");
+        }
+                
+        
+        scheduler = Executors.newScheduledThreadPool(1);  // Maak een threadpool
+        scheduler.scheduleAtFixedRate(() -> {
+            try {
+                System.out.println("indexToFetch: " + indexesToFetch);
+                lookForNewFriends();
+                fetchAndUpdateData();
+                if (change) {
+                    chatGUI.refreshAllPanels();
+                    change = false;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }, 0, 1, TimeUnit.SECONDS);
     }
 
+    @SuppressWarnings("unchecked")
     public void lookForNewFriends() throws Exception{
         JSONArray newFriends = bulletinBoard.fetchNewFriends(hashUserName(username));
         if (newFriends == null) {
-            System.out.println("Er zijn geen nieuwe vrienden.");
+            chatGUI.sendNotification("Er zijn geen nieuwe subscribers.");
             return;
         }
         for (Object obj : newFriends) {
@@ -181,37 +256,42 @@ public class ClientMain {
             String[] parts = decryptedMessage.split(";");
 
             String usernameNewPerson = parts[0];
-            // String indexMe = parts[1];
-            // String tagMe = parts[2];
-            // String indexOther = parts[3];
-            // String tagOther = parts[4];
 
-            JSONObject newPersonSubscribed = new JSONObject();
-            newPersonSubscribed.put("otherIndex", Integer.parseInt(parts[3]));
-            newPersonSubscribed.put("otherTag", parts[2]);
-            newPersonSubscribed.put("myIndex", Integer.parseInt(parts[3]));
-            newPersonSubscribed.put("myTag", parts[4]);
+            if (!isVerified) {
+                System.out.println("De handtekening is niet geldig.");
+                chatGUI.sendNotification("De handtekening van user " + username + " is niet geldig in functie lookForNewFriends().");
+                return;
+            }
+
+            JSONObject newPersonSubscribedInfo = new JSONObject();
+            int receiveIndex = Integer.parseInt(parts[1]);
+            String receiveTag = parts[2];
+            int sendIndex = Integer.parseInt(parts[3]);
+            String sendTag = parts[4];
+
+            newPersonSubscribedInfo.put("receiveIndex", receiveIndex);
+            newPersonSubscribedInfo.put("receiveTag", receiveTag);
+            newPersonSubscribedInfo.put("sendIndex", sendIndex);
+            newPersonSubscribedInfo.put("sendTag", sendTag);
 
             // Output the results
             String encodedKeySend = Base64.getEncoder().encodeToString(decryptedSymmetricKeySend.getEncoded());
             String encodedKeyReceive = Base64.getEncoder().encodeToString(decryptedSymmetricKeyReceive.getEncoded());
             
-            newPersonSubscribed.put("symmetricKeySendBase64", encodedKeySend);
-            newPersonSubscribed.put("symmetricKeyReceiveBase64", encodedKeyReceive);
-            jsonHandler.addNewPersonSubscribed(usernameNewPerson, newPersonSubscribed);
+            newPersonSubscribedInfo.put("symmetricKeySend", encodedKeySend);
+            newPersonSubscribedInfo.put("symmetricKeyReceive", encodedKeyReceive);
+            jsonHandler.addUserToList(usernameNewPerson, newPersonSubscribedInfo, "newPeople");
+            indexesToFetch.put(receiveIndex, receiveTag + ";" + usernameNewPerson + ";newPeople");
 
-            // System.out.println("userName: " + decryptedMessage.split(";")[0]);
-            // System.out.println("indexMe: " + indexMe);
-            // System.out.println("tagMe: " + tagMe);
-            // System.out.println("indexOther: " + indexOther);
-            // System.out.println("tagOther: " + tagOther);
-            // System.out.println("Symmetric key Send Base64: " + encodedKeySend);
-            // System.out.println("Symmetric key Receive Base64: " + encodedKeyReceive);
-            // System.out.println("Signature verification: " + (isVerified ? "VALID" : "INVALID"));
-            // System.out.println();
+            jsonHandler.addNewUserName(usernameNewPerson);
+
+            answerToNewUser(usernameNewPerson, newPersonSubscribedInfo);
+
+            change = true;
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void createNewUser(BulletinBoardInterface bulletinBoard) throws IOException, NoSuchAlgorithmException{
         JSONObject jsonObject = new JSONObject();
 
@@ -225,10 +305,12 @@ public class ClientMain {
 
         jsonObject.put("publicKey", publicKeyBase64);
         jsonObject.put("privateKey", privateKeyBase64);
-        jsonObject.put("initialFriendRequests", new JSONArray()); // ONZICHTBAAR: Nieuwe gebruiker stuurt naar iedereen info
+        jsonObject.put("waitingHandShake", new JSONArray()); // ONZICHTBAAR: Nieuwe gebruiker stuurt naar iedereen info
         jsonObject.put("newPeople", new JSONArray());  // andere gebruikers ontvangen info van nieuwe gebruiker
         jsonObject.put("friendRequests", new JSONArray()); // de andere persoon heeft je geAdd is geklikt en je hebt een vriendschapsverzoek ontvangen
         jsonObject.put("friends", new JSONArray()); // Vrienden
+        jsonObject.put("inAfwachting", new JSONArray()); // Friend request is verstuurd, maar nog niet geaccepteerd
+        jsonObject.put("allUserNames", new JSONArray()); // username, hash
 
 
         jsonHandler.writeJsonFile(jsonObject);
@@ -243,6 +325,7 @@ public class ClientMain {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void addAllSubscribers(BulletinBoardInterface bulletinBoard) throws Exception {
         // lees alle gebruikers in
         HashMap<String, String> subscribers = bulletinBoard.getSubscribers();
@@ -255,34 +338,34 @@ public class ClientMain {
 
             System.out.println("Bezig met toevoegen van " + userNameOtherSubscriber + "...");
             // genereer een random tag
-            String tagMe = generateRandomTag(30);
-            String tagOther = generateRandomTag(30);
+            String sendTag = generateRandomTag(30);
+            String receiveTag = generateRandomTag(30);
             // genereer een random Integer = index, checken of deze niet in gebruik is
-            int indexMe;
+            int sendIndex;
             while (true) {
-                indexMe = (int) (Math.random() * 999999);
-                if (bulletinBoard.reserveSpot(indexMe)) {
+                sendIndex = (int) (Math.random() * 999999);
+                if (bulletinBoard.reserveSpot(sendIndex)) {
                     break;
                 }
                 // System.out.println("Random integer: " + randomIndex);
             }
-            int indexOther;
+            int receiveIndex;
             while (true) {
-                indexOther = (int) (Math.random() * 999999);
-                if (bulletinBoard.reserveSpot(indexOther)) {
+                receiveIndex = (int) (Math.random() * 999999);
+                if (bulletinBoard.reserveSpot(receiveIndex)) {
                     break;
                 }
                 // System.out.println("Random integer: " + randomIndex);
             }
             // bericht opstellen
-            String originalMessage = username + ";" + indexMe + ";" + tagMe + ";" + indexOther + ";" + tagOther;
+            String originalMessage = username + ";" + sendIndex + ";" + sendTag + ";" + receiveIndex + ";" + receiveTag;
 
             // opslaan voor jezelf
             JSONObject newFriend = new JSONObject();
-            newFriend.put("myIndex", indexMe);
-            newFriend.put("myTag", tagMe);
-            newFriend.put("otherIndex", indexOther);
-            newFriend.put("otherTag", tagOther);
+            newFriend.put("sendIndex", sendIndex);
+            newFriend.put("sendTag", sendTag);
+            newFriend.put("receiveIndex", receiveIndex);
+            newFriend.put("receiveTag", receiveTag);
 
             JSONObject jsonObject = jsonHandler.readJsonFile();
             // Verkrijg de waarde van de private key
@@ -295,14 +378,15 @@ public class ClientMain {
             // encrypts signed message with symmetric key
             SecretKey symmetricKeySend = generateAESKey();
             SecretKey symmetricKeyReceive = generateAESKey();
-            byte[] encryptedMessage = encryptMessageWithAES(originalMessage, signedMessage, symmetricKeySend);
+            byte[] encryptedMessage = encryptMessageAndSignatureWithAES(originalMessage, signedMessage, symmetricKeySend);
 
             String encodedKeySend = Base64.getEncoder().encodeToString(symmetricKeySend.getEncoded());
             String encodedKeyReceive = Base64.getEncoder().encodeToString(symmetricKeyReceive.getEncoded());
             newFriend.put("symmetricKeySend", encodedKeySend);
             newFriend.put("symmetricKeyReceive", encodedKeyReceive);
 
-            jsonHandler.initializeComOtherUsers(userNameOtherSubscriber, newFriend);
+            jsonHandler.addUserToList(userNameOtherSubscriber, newFriend, "waitingHandShake");
+            indexesToFetch.put(receiveIndex, receiveTag + ";" + userNameOtherSubscriber + ";waitingHandShake");
 
             // encrypts symmetric key with receiver's public key 
             String publicKeyOtherUserBase64 = subscribers.get(userNameOtherSubscriber);
@@ -318,6 +402,132 @@ public class ClientMain {
             
     }
 
+    @SuppressWarnings("unchecked")
+    private void fetchAndUpdateData() throws Exception {
+        for (int index : indexesToFetch.keySet()) {
+            String[] infoAboutFetch = indexesToFetch.get(index).split(";");
+            String tag = infoAboutFetch[0];
+            String userNameSender = infoAboutFetch[1];
+            String listName = infoAboutFetch[2];
+            
+            String message = bulletinBoard.getMessage(index, tag);
+            System.out.println("Message opgehaald : " + message);
+            if (message != null) {
+                String symKeyBase64 = jsonHandler.getSymmetricKeyReceiveFromList(userNameSender, listName);
+                String decryptedMessage = decryptMessageWithAES(message, symKeyBase64);
+                System.out.println("Decrypted message: " + decryptedMessage);
+                String[] parts = decryptedMessage.split(";");
+                    
+                if (parts[0].equals("ID")) {
+                    String usernameSender = parts[1];  // username
+                    String hashedUsername = parts[2];  // hashedUsername
+                    int nextReceiveIndex = Integer.parseInt(parts[3]);  // nextSendIndex
+                    String nextReceiveTag = parts[4];  // nextSendTag
+
+                    if (!hashedUsername.equals(userNameSender)) {
+                        System.out.println("In de if(!hashedUsername.equals(usernameHashed)) statement met de assert false in fetchAndUpdateData");
+                        assert false : "ERROR: hashedUsername does not match the username in fetchHandshakes";
+                    }
+                    JSONObject userInfo = jsonHandler.removeUserFromList(hashedUsername, "waitingHandShake");
+
+
+                    if (userInfo == null) {
+                        System.out.println("In de if(userInfo == null) statement met de assert false in fetchHandshakes");
+                        assert false : "ERROR: userInfo is null in addPeriodicFetchOnIndexForID";
+                    }
+                    jsonHandler.addUserToList(usernameSender, userInfo, "newPeople");
+                    indexesToFetch.put(nextReceiveIndex, nextReceiveTag + ";" + usernameSender + ";newPeople");
+
+                    String derivedSymKey = deriveSymKey(tag, symKeyBase64);
+
+                    jsonHandler.updateReceiveInfo(usernameSender, nextReceiveIndex, nextReceiveTag, derivedSymKey ,"newPeople");
+
+                    jsonHandler.addNewUserName(usernameSender);
+
+                    change = true;
+
+                    indexesToFetch.remove(index);
+                } else if(parts[0].equals("REQUEST")) {
+                    String usernameSender = parts[1];  // username
+                    int nextReceiveIndex = Integer.parseInt(parts[2]);  // nextSendIndex
+                    String nextReceiveTag = parts[3];  // nextSendTag
+
+                    JSONObject userInfo = jsonHandler.removeUserFromList(usernameSender, "newPeople");
+
+
+                    if (userInfo == null) {
+                        System.out.println("In de if(userInfo == null) statement met de assert false in fetchAndUpdateData");
+                        assert false : "ERROR: userInfo is null in addPeriodicFetchOnIndexForID";
+                    }
+
+                    jsonHandler.addUserToList(usernameSender, userInfo, "friendRequests");
+
+                    // Volgens mij hoef je niet te checken of hij nog antwoord, want jij moet gwn nog kiezen of je bevriend wilt zijn
+                    // indexesToFetch.put(nextReceiveIndex, nextReceiveTag + ";" + username + ";newPeople");
+
+                    String derivedSymKey = deriveSymKey(tag, symKeyBase64);
+
+                    jsonHandler.updateReceiveInfo(usernameSender, nextReceiveIndex, nextReceiveTag, derivedSymKey ,"friendRequests");
+
+                    change = true;
+
+                    indexesToFetch.remove(index);
+
+                } else if (parts[0].equals("REMOVE")) {
+                    System.out.println("In de if(parts[0].equals(\"REMOVE\")) statement in fetchAndUpdateData");
+                    JSONObject userRemoveInfo = jsonHandler.removeUserFromList(userNameSender, "newPeople");
+
+                    int receiveIndex = ((Long) userRemoveInfo.get("receiveIndex")).intValue();
+                    int sendIndex = ((Long) userRemoveInfo.get("sendIndex")).intValue();
+            
+                    bulletinBoard.clearSpot(receiveIndex);
+                    bulletinBoard.clearSpot(sendIndex);
+
+                    change = true;
+
+                    indexesToFetch.remove(index);
+                } else if (parts[0].equals("ACCEPT")) {
+                    System.out.println("In de if(parts[0].equals(\"ACCEPT\")) statement in fetchAndUpdateData");
+
+                    String usernameSender = parts[1];  // username
+                    int nextReceiveIndex = Integer.parseInt(parts[2]);  // nextSendIndex
+                    String nextReceiveTag = parts[3];  // nextSendTag
+
+                    JSONObject userInfo = jsonHandler.removeUserFromList(userNameSender, "inAfwachting");
+
+                    userInfo.put("chat", new JSONArray());
+
+                    jsonHandler.addUserToList(usernameSender, userInfo, "friends");
+
+                    String derivedSymKey = deriveSymKey(tag, symKeyBase64);
+
+                    jsonHandler.updateReceiveInfo(usernameSender, nextReceiveIndex, nextReceiveTag, derivedSymKey ,"friends");
+
+                    change = true;
+
+                    indexesToFetch.remove(index);
+                } else if (parts[0].equals("DECLINE")) {
+                    System.out.println("In de if(parts[0].equals(\"DECLINE\")) statement in fetchAndUpdateData");
+                    JSONObject userRemoveInfo = jsonHandler.removeUserFromList(userNameSender, "inAfwachting");
+
+                    int receiveIndex = ((Long) userRemoveInfo.get("receiveIndex")).intValue();
+                    int sendIndex = ((Long) userRemoveInfo.get("sendIndex")).intValue();
+            
+                    bulletinBoard.clearSpot(receiveIndex);
+                    bulletinBoard.clearSpot(sendIndex);
+
+                    change = true;
+
+                    indexesToFetch.remove(index);
+                } else {
+                    System.out.println("In de if(!parts[0].equals(\"ID\")) statement met de assert false in fetchHandshakes");
+                    assert false : "ERROR: message got in addPeriodicFetchOnIndexForID is not an ID message";
+                }
+            }
+        }
+                
+    }
+
     private static String generateRandomTag(int length) {
         String characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"; // Mogelijke karakters
         StringBuilder tag = new StringBuilder();
@@ -331,12 +541,167 @@ public class ClientMain {
         return tag.toString();  // Retourneer de gegenereerde tag
     }
 
+    private void answerToNewUser(String usernameNewPerson, JSONObject newUser) throws Exception {
+        int sendIndex = (int) newUser.get("sendIndex");
+        String sendTag = (String) newUser.get("sendTag");
+        String encodedKeySend = (String) newUser.get("symmetricKeySend");
+
+        int nextSendIndex;
+        while(true) {
+            nextSendIndex = (int) (Math.random() * 999999);
+            if (bulletinBoard.reserveSpot(nextSendIndex)) {
+                break;
+            }
+        }
+        String nextSendTag = generateRandomTag(30);
+
+        String message = "ID;" + username + ";" + hashUserName(username) + ";" + nextSendIndex + ";" + nextSendTag;
+        String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
+
+        String derivedSymKey = deriveSymKey(sendTag, encodedKeySend);
+
+
+        System.out.println("next send index net voor update: " + nextSendIndex);
+        System.out.println("next send tag net voor update: " + nextSendTag);
+        System.out.println("derivedSymKey net voor update: " + derivedSymKey);
+        jsonHandler.updateSendInfo(usernameNewPerson, nextSendIndex, nextSendTag, derivedSymKey ,"newPeople");
+
+        bulletinBoard.addMessage(sendIndex, encryptedMessage, sendTag);
+    }
+
+    public void sendFriendRequest(String userNameReceiver) throws Exception {
+        JSONObject userInfo = jsonHandler.getPersonOfList(userNameReceiver, "newPeople");
+
+        int sendIndex = ((Long) userInfo.get("sendIndex")).intValue();
+        String sendTag = (String) userInfo.get("sendTag");
+        String encodedKeySend = (String) userInfo.get("symmetricKeySend");
+
+        int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
+        String receiveTag = (String) userInfo.get("receiveTag");
+
+        int nextSendIndex;
+        while(true) {
+            nextSendIndex = (int) (Math.random() * 999999);
+            if (bulletinBoard.reserveSpot(nextSendIndex)) {
+                break;
+            }
+        }
+        String nextSendTag = generateRandomTag(30);
+
+        String message = "REQUEST;" + username + ";" + nextSendIndex + ";" + nextSendTag;
+        String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
+
+        String derivedSymKey = deriveSymKey(sendTag, encodedKeySend);
+
+
+        JSONObject receiverInfo = jsonHandler.removeUserFromList(userNameReceiver, "newPeople");
+
+        jsonHandler.addUserToList(userNameReceiver, receiverInfo, "inAfwachting");
+
+        indexesToFetch.put(receiveIndex, receiveTag + ";" + userNameReceiver + ";inAfwachting");
+
+        jsonHandler.updateSendInfo(userNameReceiver, nextSendIndex, nextSendTag, derivedSymKey ,"inAfwachting");
+
+        bulletinBoard.addMessage(sendIndex, encryptedMessage, sendTag);
+
+        change = true;
+    }
+
+    public void removePersonOutNewPeople(String userNameReceiver) throws Exception {
+        JSONObject userInfo = jsonHandler.removeUserFromList(userNameReceiver, "newPeople");
+
+        int sendIndex = ((Long) userInfo.get("sendIndex")).intValue();
+        String sendTag = (String) userInfo.get("sendTag");
+        String encodedKeySend = (String) userInfo.get("symmetricKeySend");
+
+        int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
+
+        String message = "REMOVE;" + ";" + username + ";" + 0;
+        String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
+
+        bulletinBoard.addMessage(sendIndex, encryptedMessage, sendTag);
+
+        indexesToFetch.remove(sendIndex);
+        indexesToFetch.remove(receiveIndex);
+
+        change = true;
+    }
+
+    @SuppressWarnings("unchecked")
+    public void acceptFriendRequest(String userNameReceiver) throws Exception {
+        JSONObject userInfo = jsonHandler.getPersonOfList(userNameReceiver, "friendRequests");
+
+        int sendIndex = ((Long) userInfo.get("sendIndex")).intValue();
+        String sendTag = (String) userInfo.get("sendTag");
+        String encodedKeySend = (String) userInfo.get("symmetricKeySend");
+
+        int nextSendIndex;
+        while(true) {
+            nextSendIndex = (int) (Math.random() * 999999);
+            if (bulletinBoard.reserveSpot(nextSendIndex)) {
+                break;
+            }
+        }
+        String nextSendTag = generateRandomTag(30);
+
+        String message = "ACCEPT;" + username + ";" + nextSendIndex + ";" + nextSendTag;
+        String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
+
+        String derivedSymKey = deriveSymKey(sendTag, encodedKeySend);
+
+        JSONObject receiverInfo = jsonHandler.removeUserFromList(userNameReceiver, "friendRequests");
+
+        receiverInfo.put("chat", new JSONArray());
+
+        jsonHandler.addUserToList(userNameReceiver, receiverInfo, "friends");
+
+        jsonHandler.updateSendInfo(userNameReceiver, nextSendIndex, nextSendTag, derivedSymKey ,"friends");
+
+        bulletinBoard.addMessage(sendIndex, encryptedMessage, sendTag);
+
+        change = true;
+    }
+    
+    public void declineFriendRequest(String userNameReceiver) throws Exception {
+        JSONObject userInfo = jsonHandler.removeUserFromList(userNameReceiver, "friendRequests");
+
+        int sendIndex = ((Long) userInfo.get("sendIndex")).intValue();
+        String sendTag = (String) userInfo.get("sendTag");
+        String encodedKeySend = (String) userInfo.get("symmetricKeySend");
+
+        int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
+
+        String message = "DECLINE;" + ";" + username + ";" + 0;
+        String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
+
+        bulletinBoard.addMessage(sendIndex, encryptedMessage, sendTag);
+
+        indexesToFetch.remove(sendIndex);
+        indexesToFetch.remove(receiveIndex);
+
+        change = true;
+    }
+
+    public void startChat(String userNameReceiver) {
+        System.out.println("Start chat with " + userNameReceiver);
+        // ChatWindow chatWindow = new ChatWindow.getInstance(username, userNameReceiver, this);
+        ChatWindow chatWindow = ChatWindow.getInstance(username, userNameReceiver, this);
+    }
+
+    public void sendMessage(String sender, String receiver, String message) {
+        
+    }
+
     private void setBulletinBoard(BulletinBoardInterface bulletinBoard) {
         this.bulletinBoard = bulletinBoard;
     }
 
     public void setUsername(String username) {
         this.username = username;
+    }
+
+    public void setGUI(GUI chatGUI) {
+        this.chatGUI = chatGUI;
     }
 
     private static String hashUserName(String userName) {
@@ -360,6 +725,25 @@ public class ClientMain {
         return keyGen.generateKey();
     }
 
+    private String deriveSymKey(String tagUsed, String base64encodedKey) throws NoSuchAlgorithmException, InvalidKeySpecException {
+        byte[] KeyBytes = Base64.getDecoder().decode(base64encodedKey);
+
+        // Salt (gedeeld tussen zender en ontvanger)
+        byte[] sharedSalt = tagUsed.getBytes();
+
+        // Combineer de sleutelbytes met contextinformatie
+        String inputKeyMaterial = Base64.getEncoder().encodeToString(KeyBytes);
+
+        // Afgeleide sleutel maken met PBKDF2
+        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+        PBEKeySpec spec = new PBEKeySpec(inputKeyMaterial.toCharArray(), sharedSalt, 100000, 256);
+        byte[] derivedKeyBytes = factory.generateSecret(spec).getEncoded();
+
+        // Print de afgeleide sleutel
+        System.out.println("Afgeleide sleutel: " + Base64.getEncoder().encodeToString(derivedKeyBytes));
+        return Base64.getEncoder().encodeToString(derivedKeyBytes);
+    }
+
     // Sign the message with your private key
     private static byte[] signMessage(String message, PrivateKey privateKey) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -373,12 +757,44 @@ public class ClientMain {
     }
 
     // Encrypt the message + signature with AES (Symmetric key)
-    private static byte[] encryptMessageWithAES(String message, byte[] signature, SecretKey symmetricKey) throws Exception {
+    private static byte[] encryptMessageAndSignatureWithAES(String message, byte[] signature, SecretKey symmetricKey) throws Exception {
         Cipher cipher = Cipher.getInstance("AES");
         cipher.init(Cipher.ENCRYPT_MODE, symmetricKey);
         
         String combined = message + "||" + Base64.getEncoder().encodeToString(signature);
         return cipher.doFinal(combined.getBytes(StandardCharsets.UTF_8));
+    }
+
+    public static String decryptMessageWithAES(String encryptedMessage, String base64encodedKey) throws Exception {
+        byte[] decodedKeyBytes = Base64.getDecoder().decode(base64encodedKey);
+        SecretKey symmetricKey = new SecretKeySpec(decodedKeyBytes, 0, decodedKeyBytes.length, "AES");
+
+        // Initialiseer een AES Cipher in DECRYPT_MODE
+        Cipher cipher = Cipher.getInstance("AES");
+        cipher.init(Cipher.DECRYPT_MODE, symmetricKey);
+    
+        // Decodeer de Base64-gecodeerde string naar een byte[]
+        byte[] decodedBytes = Base64.getDecoder().decode(encryptedMessage);
+    
+        // Ontsleutel de bytes
+        byte[] decryptedBytes = cipher.doFinal(decodedBytes);
+    
+        // Zet de gedecrypteerde bytes om naar een string
+        return new String(decryptedBytes, StandardCharsets.UTF_8);
+    }
+
+    public static String encryptMessageWithAES(String message, String base64encodedKey) throws Exception {
+        byte[] decodedKeyBytes = Base64.getDecoder().decode(base64encodedKey);
+        SecretKey symmetricKey = new SecretKeySpec(decodedKeyBytes, 0, decodedKeyBytes.length, "AES");
+
+        // Initialiseer een AES Cipher in ENCRYPT_MODE
+        Cipher cipher = Cipher.getInstance("AES");
+        cipher.init(Cipher.ENCRYPT_MODE, symmetricKey);
+    
+        // Versleutel de boodschap en geef het resultaat terug
+        byte[] encryptedMessage = cipher.doFinal(message.getBytes(StandardCharsets.UTF_8));
+        String encryptedMessageString = Base64.getEncoder().encodeToString(encryptedMessage);
+        return encryptedMessageString;
     }
 
     // Encrypt symmetric key (K) with receiver's public key (PK_B)

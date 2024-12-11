@@ -14,4 +14,5 @@ public interface BulletinBoardInterface extends Remote {
     HashMap<String, String> getSubscribers() throws RemoteException;
     void addNewFriendTo(String userName, String encryptedSymmetricKeyBase64Send, String encryptedSymmetricKeyBase64Receive, String encryptedMessageBase64, String publicKeyBase64) throws RemoteException;
     JSONArray fetchNewFriends(String userName) throws RemoteException;
+    void clearSpot(int index) throws RemoteException;
 }
