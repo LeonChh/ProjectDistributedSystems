@@ -41,6 +41,9 @@ public class ClientMain {
     private JsonHandler jsonHandler;
     private BulletinBoardInterface bulletinBoard;
     private static MessageDigest digestSHA256; // SHA-256 message digest voor te hashen
+
+    private static int panelWidth = 1200;
+    private static int panelHight = 800;
     
     public static void main(String[] args) {
         try {
@@ -49,45 +52,20 @@ public class ClientMain {
             BulletinBoardInterface bulletinBoard = client.connectToServer();
             client.setBulletinBoard(bulletinBoard);
 
-            // // Maak een nieuw JFrame voor de applicatie
-            // JFrame frame = new JFrame("Chat System");
-            // frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            // frame.setSize(500, 500);
+            // Maak een nieuw JFrame voor de applicatie
+            JFrame frame = new JFrame("Chat System");
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.setSize(500, 120);
 
-            // // Start met het inlogpaneel en geef ClientMain door aan het LoginPanel
-            // LoginPanel loginPanel = new LoginPanel(client, frame);
-            // frame.setContentPane(loginPanel);
-            // frame.setVisible(true);
-            
+            // Start met het inlogpaneel en geef ClientMain door aan het LoginPanel
+            LoginPanel loginPanel = new LoginPanel(client, frame);
+            frame.setContentPane(loginPanel);
 
-            client.login(null);
-            boolean online = true;
-            while (online){
-                System.out.println("1. Bericht plaatsen");
-                System.out.println("2. Bericht ophalen");
-                System.out.println("3. Kijken of er nieuwe vrienden zijn");
-                System.out.println("4. Afmelden");
-                
-                String keuze = System.console().readLine();
-                switch (keuze) {
-                    case "1":
-                        System.out.println("Bericht plaatsen");
-                        break;
-                    case "2":
-                        System.out.println("Bericht ophalen");
-                        break;
-                    case "3":
-                        client.lookForNewFriends(bulletinBoard);
-                        break;
-                    case "4":
-                        System.out.println("Afmelden");
-                        online = false;
-                        break;
-                    default:
-                        System.out.println("Ongeldige keuze");
-                        break;
-                }
-            }
+            // Plaats het JFrame in het midden van het scherm
+            frame.setLocationRelativeTo(null);
+
+            // Maak het frame zichtbaar
+            frame.setVisible(true);
             
 
         } catch (Exception e) {
@@ -125,40 +103,41 @@ public class ClientMain {
     }
     
     public void login(JFrame frame) throws Exception {
-        while (true) {
-            System.out.print("Geef een gebruikersnaam in: ");
-            username = System.console().readLine();
-            if (username.length() > 0) {
-                System.out.print("Is " + username + " je username? (ja/nee): ");
-                if (System.console().readLine().equals("ja")) {
-                    break;
-                }
-            }
-        }
-
-        // // Maak een nieuw JFrame voor de chat GUI (in plaats van het inlogpaneel)
-        // GUI chatGUI = new GUI(username);
-        // frame.setTitle(username + "'s Chat");
-        // frame.setContentPane(chatGUI); // Verander de inhoud van het frame naar de chat GUI
-        // frame.revalidate(); // Herbouw het frame om de chat GUI weer te geven
-
         String filename = "ClientSide/jsonFiles/" + username + ".json";
         file = new File(filename);
 
         if (!file.exists()) {
-            System.out.println("Welkom in onze service, " + username + "!");
             file.createNewFile();
             jsonHandler = new JsonHandler(filename);
             createNewUser(bulletinBoard);
             addAllSubscribers(bulletinBoard);
+
+            // Maak een nieuw JFrame voor de chat GUI (in plaats van het inlogpaneel)
+            GUI chatGUI = new GUI(username, this);
+            frame.setTitle(username + "'s Chat");
+            frame.setContentPane(chatGUI); // Verander de inhoud van het frame naar de chat GUI
+            frame.revalidate(); // Herbouw het frame om de chat GUI weer te geven
+            frame.setSize(panelWidth, panelHight);
+            frame.setLocationRelativeTo(null);
+
+            chatGUI.sendNotification("Welkom in onze service, " + username + "!");
         } else {
-            System.out.println("Welkom terug, " + username + "!");
             jsonHandler = new JsonHandler(filename);
-            lookForNewFriends(bulletinBoard);
+            lookForNewFriends();
+
+            // Maak een nieuw JFrame voor de chat GUI (in plaats van het inlogpaneel)
+            GUI chatGUI = new GUI(username, this);
+            frame.setTitle(username + "'s Chat");
+            frame.setContentPane(chatGUI); // Verander de inhoud van het frame naar de chat GUI
+            frame.revalidate(); // Herbouw het frame om de chat GUI weer te geven
+            frame.setSize(panelWidth, panelHight);
+            frame.setLocationRelativeTo(null);
+
+            chatGUI.sendNotification("Welkom terug, " + username + "!");
         }
     }
 
-    private void lookForNewFriends(BulletinBoardInterface bulletinBoard) throws Exception{
+    public void lookForNewFriends() throws Exception{
         JSONArray newFriends = bulletinBoard.fetchNewFriends(hashUserName(username));
         if (newFriends == null) {
             System.out.println("Er zijn geen nieuwe vrienden.");

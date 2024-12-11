@@ -6,10 +6,17 @@
     "configurations": [
         {
             "type": "java",
+            "name": "GUI",
+            "request": "launch",
+            "mainClass": "ClientSide.GUI",
+            "projectName": "JavaCode_868fb848"
+        },
+        {
+            "type": "java",
             "name": "Current File",
             "request": "launch",
             "mainClass": "${file}",
-            "vmArgs": "-ea"  // assertions aanzetten
+            "vmArgs": "-ea"
         },
         {
             "type": "java",
@@ -17,7 +24,7 @@
             "request": "launch",
             "mainClass": "ClientSide.ClientMain",
             "projectName": "JavaCode_868fb848",
-            "vmArgs": "-ea"  // assertions aanzetten
+            "vmArgs": "-ea"
         },
         {
             "type": "java",
@@ -25,7 +32,7 @@
             "request": "launch",
             "mainClass": "ServerSide.ServerMain",
             "projectName": "JavaCode_868fb848",
-            "vmArgs": "-ea"  // assertions aanzetten
+            "vmArgs": "-ea"
         }
     ]
 }

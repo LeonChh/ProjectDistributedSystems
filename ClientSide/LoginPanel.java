@@ -4,6 +4,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 
 public class LoginPanel extends JPanel {
 
@@ -43,6 +45,21 @@ public class LoginPanel extends JPanel {
                     login();
                 } catch (Exception e1) {
                     e1.printStackTrace();
+                }
+            }
+        });
+
+        // Voeg KeyListener toe aan het usernameField om Enter te detecteren
+        usernameField.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                // Controleer of de Enter-toets is ingedrukt
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    try {
+                        login();  // Roep de login functie aan
+                    } catch (Exception e1) {
+                        e1.printStackTrace();
+                    }
                 }
             }
         });
