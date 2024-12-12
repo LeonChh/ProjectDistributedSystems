@@ -1,6 +1,6 @@
 Run eerst de file ServerSide\ServerMain.java, dan kan je meerdere clients opstarten door ClientSide\ClientMain.java te runnen.
 
-Zolang je de server niet afzet kan je de clients zoveel opstarten,afsluiten of heropstarten. 
+Zolang je de server niet afzet kan je de clients zoveel als je wilt opstarten, afsluiten of heropstarten. 
 
 Wanneer je de server afsluit moet je de json files verwijderen uit de folder ClientSide\jsonFiles en de json file ServerSide\subscribers.json leeg maken of verwijderen. (Beter dat je ze leegmaakt, want je krijgt dan geen initiele foutmelding. Zal wel correct opstarten in beide gevallen.)
 
