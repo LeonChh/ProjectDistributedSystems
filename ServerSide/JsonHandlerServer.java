@@ -8,6 +8,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Base64;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.json.simple.parser.ParseException;
 
@@ -18,6 +19,9 @@ public class JsonHandlerServer {
     private FileReader reader;
     private FileWriter writer;
     private JSONParser parser;
+
+    // synchronizeren
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     // Constructor die de parser en writer initialiseert
     public JsonHandlerServer(String filePath) {
@@ -62,6 +66,31 @@ public class JsonHandlerServer {
         }
     }
 
+    // // Methode om een JSON-bestand te lezen
+    // public JSONObject readJsonFile() {
+    //     lock.readLock().lock(); // Verkrijg de read-lock
+    //     try (FileReader reader = new FileReader(filePath)) {
+    //         return (JSONObject) parser.parse(reader);
+    //     } catch (IOException | ParseException e) {
+    //         e.printStackTrace();
+    //         return null;
+    //     } finally {
+    //         lock.readLock().unlock(); // Vrijgeven van de read-lock
+    //     }
+    // }
+
+    // // Methode om een JSON-bestand te schrijven
+    // public void writeJsonFile(JSONObject jsonObject) {
+    //     lock.writeLock().lock(); // Verkrijg de write-lock
+    //     try (FileWriter writer = new FileWriter(filePath)) {
+    //         writer.write(jsonObject.toJSONString());
+    //     } catch (IOException e) {
+    //         e.printStackTrace();
+    //     } finally {
+    //         lock.writeLock().unlock(); // Vrijgeven van de write-lock
+    //     }
+    // }
+
     public void addToNewSubscriber(String userName, String publicKeyBase64) {
         JSONObject subscribers = readJsonFile(); // Leest het huidige JSON-bestand
         if (subscribers == null) {
@@ -77,6 +106,7 @@ public class JsonHandlerServer {
     }
 
     // Methode om een element toe te voegen aan het JSON-bestand
+    @SuppressWarnings("unchecked")
     public void addNewFriendTo(String userName, String encryptedSymmetricKeyBase64Send, String encryptedSymmetricKeyBase64Receive, String encryptedMessageBase64, String publicKeyBase64) {
         JSONObject subscribers = readJsonFile(); // Lees het huidige JSON-bestand
         if (subscribers == null) {

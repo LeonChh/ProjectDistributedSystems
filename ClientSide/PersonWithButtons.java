@@ -18,7 +18,7 @@ public class PersonWithButtons {
         CHAT
     }
 
-    public PersonWithButtons(String name, ActionListener addListener, ActionListener removeListener, ListElementTypes type) {
+    public PersonWithButtons(String name, ActionListener listenerButtonOne, ActionListener listenerButtonTwo, ListElementTypes type) {
         this.name = name;
         if (type == ListElementTypes.ADD) {
             this.buttonOne = new JButton("+");
@@ -33,16 +33,16 @@ public class PersonWithButtons {
         } else if (type == ListElementTypes.CHAT) {
             this.buttonOne = new JButton("Chat");
             this.buttonOne.putClientProperty("userName", name);
+            this.buttonTwo = new JButton("X");
+            this.buttonTwo.putClientProperty("userName", name);
         }
 
         
-
         this.type = type;
 
-        this.buttonOne.addActionListener(addListener);
-        if (type != ListElementTypes.CHAT){
-            this.buttonTwo.addActionListener(removeListener);
-        }
+        this.buttonOne.addActionListener(listenerButtonOne);
+        this.buttonTwo.addActionListener(listenerButtonTwo);
+        
     }
 
     public String getName() {
@@ -54,9 +54,6 @@ public class PersonWithButtons {
     }
 
     public JButton getButtonTwo() {
-        if (type == ListElementTypes.CHAT) {
-            return null;
-        }
         return buttonTwo;
     }
 
@@ -64,9 +61,8 @@ public class PersonWithButtons {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         panel.add(new JLabel(name));  // Voeg de naam toe
         panel.add(buttonOne);         // Voeg de "+" knop toe
-        if (type != ListElementTypes.CHAT) {
-            panel.add(buttonTwo);      // Voeg de "X" knop toe
-        }
+        panel.add(buttonTwo);      // Voeg de "X" knop toe
+        
         return panel;
     }
 }

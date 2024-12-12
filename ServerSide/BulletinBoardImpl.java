@@ -29,6 +29,8 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
     private MessageDigest digestSHA256;
     private JsonHandlerServer jsonHandler;
 
+    private final Object lock = new Object();
+
     public BulletinBoardImpl(int bulletinBoardSize) throws RemoteException {
         super();
         this.bulletinBoardSize = bulletinBoardSize;
@@ -91,7 +93,7 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
         byte[] tagBytesSender = bulletinBoard.get(indexAfterModulo).getTag();
 
         if (!Arrays.equals(tagBytesReceiver, tagBytesSender)) {
-            System.out.println("ERROR: tag " + tag + " komt niet overeen met tag " + bulletinBoard.get(indexAfterModulo).getTag() + " in getMessage");
+            System.out.println("ERROR: tag " + tag + " komt niet overeen met tag " + bulletinBoard.get(indexAfterModulo).getTag() + " in getMessage op index " + index);
             return null;
         }
 
@@ -104,42 +106,48 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
     }
 
     @Override
-    public boolean newSubscriber(String username, String publicKeyBase64) throws RemoteException {
-        // hash the username
-        byte[] userHashBytes = digestSHA256.digest(username.getBytes());
-        String userHashBase64 = java.util.Base64.getEncoder().encodeToString(userHashBytes);
-        jsonHandler.addToNewSubscriber(userHashBase64, publicKeyBase64);
-        return true;
+    public boolean newSubscriber(String usernameHash, String publicKeyBase64) throws RemoteException {
+        System.out.println("username new subscriber: " + usernameHash);
+        synchronized (lock) {
+            jsonHandler.addToNewSubscriber(usernameHash, publicKeyBase64);
+            return true;
+        }
     }
 
     @Override
     public HashMap<String, String> getSubscribers() throws RemoteException {
-        HashMap<String, String> subscribersMap = new HashMap<>();
-        JSONObject subscribers = jsonHandler.readJsonFile();
-        
-        if (subscribers != null) { // Controleer of het JSON-object is geladen
-            for (Object key : subscribers.keySet()) { // Itereer over de sleutels van het JSON-object
-                String username = (String) key; // De sleutel is de gebruikersnaam
-                JSONObject subscriberDetails = (JSONObject) subscribers.get(username); // Haal de details op
-                String publicKeyBase64 = (String) subscriberDetails.get("publicKey"); // Haal de public key op
-        
-                subscribersMap.put(username, publicKeyBase64); // Voeg toe aan de map
+        synchronized (lock) {
+            HashMap<String, String> subscribersMap = new HashMap<>();
+            JSONObject subscribers = jsonHandler.readJsonFile();
+            
+            if (subscribers != null) { // Controleer of het JSON-object is geladen
+                for (Object key : subscribers.keySet()) { // Itereer over de sleutels van het JSON-object
+                    String username = (String) key; // De sleutel is de gebruikersnaam
+                    JSONObject subscriberDetails = (JSONObject) subscribers.get(username); // Haal de details op
+                    String publicKeyBase64 = (String) subscriberDetails.get("publicKey"); // Haal de public key op
+            
+                    subscribersMap.put(username, publicKeyBase64); // Voeg toe aan de map
+                }
+            } else {
+                System.out.println("ERROR: subscribers is null in getSubscribers");
             }
-        } else {
-            System.out.println("ERROR: subscribers is null in getSubscribers");
-        }
 
-        return subscribersMap;
+            return subscribersMap;
+        }
     }
 
     @Override
     public void addNewFriendTo(String username, String encryptedSymmetricKeyBase64Send, String encryptedSymmetricKeyBase64Receive, String encryptedMessageBase64, String publicKeyBase64) {
-        jsonHandler.addNewFriendTo(username, encryptedSymmetricKeyBase64Send, encryptedSymmetricKeyBase64Receive, encryptedMessageBase64, publicKeyBase64);
+        synchronized (lock) {
+            jsonHandler.addNewFriendTo(username, encryptedSymmetricKeyBase64Send, encryptedSymmetricKeyBase64Receive, encryptedMessageBase64, publicKeyBase64);
+        }
     }
 
     @Override
     public JSONArray fetchNewFriends(String usernameHash) {
-        return jsonHandler.fetchNewFriends(usernameHash); // returnt nieuwe vrienden en maakt de lijst leeg
+        synchronized (lock) {
+            return jsonHandler.fetchNewFriends(usernameHash); // returnt nieuwe vrienden en maakt de lijst leeg
+        }
     }
 
     @Override
@@ -147,5 +155,29 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
         int indexAfterModulo = index % bulletinBoardSize;
         bulletinBoard.get(indexAfterModulo).setEmpty();
         System.out.println("Spot cleared at index " + index + ", state is " + bulletinBoard.get(indexAfterModulo).getState());
+    }
+
+    @Override
+    public boolean isOccupied(int index) {
+        int indexAfterModulo = index % bulletinBoardSize;
+        return bulletinBoard.get(indexAfterModulo).isOccupied();
+    }
+
+    @Override
+    public boolean isDeleted(int index) {
+        int indexAfterModulo = index % bulletinBoardSize;
+        return bulletinBoard.get(indexAfterModulo).isDeleted();
+    }
+
+    @Override
+    public boolean setDeleted(int index) {
+        int indexAfterModulo = index % bulletinBoardSize;
+        if (!bulletinBoard.get(indexAfterModulo).isReserved()) {
+            System.out.println("ERROR: index " + index + "is niet reserved in setDeleted, maar " + bulletinBoard.get(indexAfterModulo).getState());
+            return false;
+        }
+        bulletinBoard.get(indexAfterModulo).setDeleted();
+        System.out.println("Spot deleted at index " + index + ", state is " + bulletinBoard.get(indexAfterModulo).getState());
+        return true;
     }
 }

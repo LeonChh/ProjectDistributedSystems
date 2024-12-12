@@ -9,6 +9,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.json.simple.parser.ParseException;
 
@@ -19,6 +20,10 @@ public class JsonHandler {
     private FileReader reader;
     private FileWriter writer;
     private JSONParser parser;
+
+    // synchronizeren
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
 
     // Constructor die de parser en writer initialiseert
     public JsonHandler(String filePath) {
@@ -62,6 +67,31 @@ public class JsonHandler {
             }
         }
     }
+
+    // // Methode om een JSON-bestand te lezen
+    // public JSONObject readJsonFile() {
+    //     lock.readLock().lock(); // Verkrijg de read-lock
+    //     try (FileReader reader = new FileReader(filePath)) {
+    //         return (JSONObject) parser.parse(reader);
+    //     } catch (IOException | ParseException e) {
+    //         e.printStackTrace();
+    //         return null;
+    //     } finally {
+    //         lock.readLock().unlock(); // Vrijgeven van de read-lock
+    //     }
+    // }
+
+    // // Methode om een JSON-bestand te schrijven
+    // public void writeJsonFile(JSONObject jsonObject) {
+    //     lock.writeLock().lock(); // Verkrijg de write-lock
+    //     try (FileWriter writer = new FileWriter(filePath)) {
+    //         writer.write(jsonObject.toJSONString());
+    //     } catch (IOException e) {
+    //         e.printStackTrace();
+    //     } finally {
+    //         lock.writeLock().unlock(); // Vrijgeven van de write-lock
+    //     }
+    // }
 
     // Methode om een element toe te voegen aan het JSON-bestand
     public void addToJsonFile(String key, Object value) {
@@ -110,6 +140,7 @@ public class JsonHandler {
         return null;
     }
 
+    @SuppressWarnings("unchecked")
     public void addUserToList(String userName, Object info, String listName) {
         JSONObject jsonObject = readJsonFile();
         JSONArray listGiven = (JSONArray) jsonObject.get(listName);
@@ -154,13 +185,48 @@ public class JsonHandler {
                     friendInfo.put("sendIndex", nextSendIndex);
                     friendInfo.put("sendTag", nextSendTag);
                     friendInfo.put("symmetricKeySend", derivedSymKey);
+
+                    writeJsonFile(jsonObject);
+
+                    return;
+                }
+            }
+        }
+       
+    }
+
+    @SuppressWarnings("unchecked")
+    public void updateSendInfoChat(String usernameGiven, int nextSendIndex, String nextSendTag, String derivedSymKey, String messageSend, String Date) {
+        JSONObject jsonObject = readJsonFile();
+        JSONArray listGiven = (JSONArray) jsonObject.get("friends");
+
+        for (int i = 0; i < listGiven.size(); i++) {
+            JSONObject friend = (JSONObject) listGiven.get(i);
+            for (Object key : friend.keySet()) {
+                String userName = (String) key;
+                System.out.println("in updateSendInfoChat username: " + userName + ", usernameSearch: " + usernameGiven);
+                if (userName.equals(usernameGiven)) {
+                    JSONObject timeMessage = new JSONObject();
+                    timeMessage.put("time", Date);
+                    timeMessage.put("message", "SEND;" + messageSend);
+
+                    JSONObject friendInfo = (JSONObject) friend.get(userName);
+                    friendInfo.put("sendIndex", nextSendIndex);
+                    friendInfo.put("sendTag", nextSendTag);
+                    friendInfo.put("symmetricKeySend", derivedSymKey);
+                    ((JSONArray) friendInfo.get("chat")).add(timeMessage);
+
+                    writeJsonFile(jsonObject);
+
+                    return;
                 }
             }
         }
 
-        writeJsonFile(jsonObject);
+        
     }
 
+    @SuppressWarnings("unchecked")
     public void updateReceiveInfo(String username, int nextSendIndex, String nextSendTag, String derivedSymKey, String listName) {
         JSONObject jsonObject = readJsonFile();
         JSONArray listGiven = (JSONArray) jsonObject.get(listName);
@@ -174,11 +240,85 @@ public class JsonHandler {
                     friendInfo.put("receiveIndex", nextSendIndex);
                     friendInfo.put("receiveTag", nextSendTag);
                     friendInfo.put("symmetricKeyReceive", derivedSymKey);
+
+                    writeJsonFile(jsonObject);
+
+                    return;
                 }
             }
         }
 
-        writeJsonFile(jsonObject);
+        
+    }
+
+    @SuppressWarnings("unchecked")
+    public void updateReceiveInfoChat(String username, int nextSendIndex, String nextSendTag, String derivedSymKey, String messageReceived, String Date) {
+        JSONObject jsonObject = readJsonFile();
+        JSONArray listGiven = (JSONArray) jsonObject.get("friends");
+
+        for (int i = 0; i < listGiven.size(); i++) {
+            JSONObject friend = (JSONObject) listGiven.get(i);
+            for (Object key : friend.keySet()) {
+                String userName = (String) key;
+                if (userName.equals(username)) {
+                    JSONObject timeMessage = new JSONObject();
+                    timeMessage.put("time", Date);
+                    timeMessage.put("message", "RECEIVE;" + messageReceived);
+
+                    JSONObject friendInfo = (JSONObject) friend.get(userName);
+                    friendInfo.put("receiveIndex", nextSendIndex);
+                    friendInfo.put("receiveTag", nextSendTag);
+                    friendInfo.put("symmetricKeyReceive", derivedSymKey);
+                    ((JSONArray) friendInfo.get("chat")).add(timeMessage);
+
+                    writeJsonFile(jsonObject);
+
+                    return;
+                }
+            }
+        }
+
+        
+    }
+
+    public JSONArray getChatHistory(String username) {
+        JSONObject jsonObject = readJsonFile();
+        JSONArray listGiven = (JSONArray) jsonObject.get("friends");
+
+        for (int i = 0; i < listGiven.size(); i++) {
+            JSONObject friend = (JSONObject) listGiven.get(i);
+            for (Object key : friend.keySet()) {
+                String userName = (String) key;
+                if (userName.equals(username)) {
+                    JSONObject friendInfo = (JSONObject) friend.get(userName);
+                    return (JSONArray) friendInfo.get("chat");
+                }
+            }
+        }
+        assert false : "ERROR: getChatHistory: " + username + " not found";
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    public void updateChatHistory(String username, JSONArray chatHistory) {
+        JSONObject jsonObject = readJsonFile();
+        JSONArray listGiven = (JSONArray) jsonObject.get("friends");
+
+        for (int i = 0; i < listGiven.size(); i++) {
+            JSONObject friend = (JSONObject) listGiven.get(i);
+            for (Object key : friend.keySet()) {
+                String userName = (String) key;
+                if (userName.equals(username)) {
+                    JSONObject friendInfo = (JSONObject) friend.get(userName);
+                    friendInfo.put("chat", chatHistory);
+
+                    writeJsonFile(jsonObject);
+
+                    return;
+                }
+            }
+        }
+        assert false : "ERROR: setChatHistory: " + username + " not found";
     }
 
     public ArrayList<String> getUserNamesOfList(String listName){
@@ -232,25 +372,6 @@ public class JsonHandler {
         }
         assert false : "ERROR: getNewPerson: " + userName + " not found";
         return null;
-    }
-
-    public ArrayList<String> getFriends(){
-        ArrayList<String> friends = new ArrayList<>();
-
-        JSONObject jsonObject = readJsonFile();
-        JSONArray friendsJson = (JSONArray) jsonObject.get("friends");
-
-        for (int i = 0; i < friendsJson.size(); i++) {
-            JSONObject friend = (JSONObject) friendsJson.get(i);
-            for (Object key : friend.keySet()) {
-                String userName = (String) key;
-                friends.add(userName);
-            }
-        }
-
-        System.out.println("JsonHandler: getFriends: " + friends);
-
-        return friends;
     }
 
     // Methode om JSON-string te parseren

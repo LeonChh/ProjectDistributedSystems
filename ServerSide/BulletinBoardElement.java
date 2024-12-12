@@ -24,8 +24,16 @@ public class BulletinBoardElement {
         return state == State.RESERVED;
     }
 
+    public boolean isDeleted() {
+        return state == State.DELETED;
+    }
+
     public void setEmpty() {
         state = State.EMPTY;
+    }
+
+    public void setDeleted() {
+        state = State.DELETED;
     }
 
     public void setOccupied() {

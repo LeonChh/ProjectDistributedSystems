@@ -15,18 +15,21 @@ import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
-import javax.swing.JFrame;
-import javax.swing.SwingUtilities;
 
 import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -49,12 +52,13 @@ public class ClientMain {
     private BulletinBoardInterface bulletinBoard;
     private static MessageDigest digestSHA256; // SHA-256 message digest voor te hashen
 
-    private HashMap<Integer, String> indexesToFetch = new HashMap<>();
+    private ConcurrentHashMap<Integer, String> indexesToFetch = new ConcurrentHashMap<>();
 
     private ScheduledExecutorService scheduler;
 
-    private static int panelWidth = 1200;
-    private static int panelHight = 800;
+    private static int chatHistorySize = 50;
+    private static int panelWidth = 800;
+    private static int panelHight = 400;
     private GUI chatGUI;
     private boolean change = true;
     
@@ -193,6 +197,33 @@ public class ClientMain {
             
             indexesToFetch.put(receiveIndex, receiveTag + ";" + userNameOtherSubscriber + ";inAfwachting");
         }
+
+        // checken op nieuwe berichten tijdens je weg was
+        ArrayList<JSONObject> friends = jsonHandler.getList("friends");
+        for (JSONObject userObject : friends) {
+            String nameFriend = (String) userObject.keySet().iterator().next();
+
+            JSONObject userInfo = (JSONObject) userObject.get(nameFriend);
+
+            System.out.println("User: " + nameFriend);
+            int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
+            
+            if (bulletinBoard.isOccupied(receiveIndex)) {
+                chatGUI.sendNotification("Je hebt een nieuw bericht van " + nameFriend + "!");
+            } else if (bulletinBoard.isDeleted(receiveIndex)) {
+                JSONObject userRemoveInfo = jsonHandler.removeUserFromList(nameFriend, "friends");
+
+                int receiveIndexDup = ((Long) userRemoveInfo.get("receiveIndex")).intValue();
+                int sendIndex = ((Long) userRemoveInfo.get("sendIndex")).intValue();
+        
+                bulletinBoard.clearSpot(receiveIndexDup);
+                bulletinBoard.clearSpot(sendIndex);
+
+                chatGUI.sendNotification(nameFriend + " heeft je verwijderd!");
+
+                change = true;
+            }   
+        }
                 
         
         scheduler = Executors.newScheduledThreadPool(1);  // Maak een threadpool
@@ -317,7 +348,9 @@ public class ClientMain {
         System.out.println("Keys successfully saved to the file.");
         
         // toevoegen van de gebruiker aan de server
-        boolean gelukt = bulletinBoard.newSubscriber(username, publicKeyBase64);
+        byte[] userHashBytes = digestSHA256.digest(username.getBytes());
+        String userHashBase64 = java.util.Base64.getEncoder().encodeToString(userHashBytes);
+        boolean gelukt = bulletinBoard.newSubscriber(userHashBase64, publicKeyBase64);
 
         if (!gelukt) {
             assert false : "Er is iets fout gegaan bij het toevoegen van de gebruiker aan de server.";
@@ -409,6 +442,21 @@ public class ClientMain {
             String tag = infoAboutFetch[0];
             String userNameSender = infoAboutFetch[1];
             String listName = infoAboutFetch[2];
+
+            // checken of je niet verwijderd bent
+            if (bulletinBoard.isDeleted(index)) {
+                JSONObject userRemoveInfo = jsonHandler.removeUserFromList(userNameSender, "friends");
+
+                int receiveIndexDup = ((Long) userRemoveInfo.get("receiveIndex")).intValue();
+                int sendIndex = ((Long) userRemoveInfo.get("sendIndex")).intValue();
+        
+                bulletinBoard.clearSpot(receiveIndexDup);
+                bulletinBoard.clearSpot(sendIndex);
+
+                chatGUI.sendNotification(userNameSender + " heeft je verwijderd!");
+
+                change = true;
+            }
             
             String message = bulletinBoard.getMessage(index, tag);
             System.out.println("Message opgehaald : " + message);
@@ -519,6 +567,33 @@ public class ClientMain {
                     change = true;
 
                     indexesToFetch.remove(index);
+                } else if (parts[0].equals("MESSAGE")) { 
+                    String usernameSender = parts[1];  // username
+                    int nextReceiveIndex = Integer.parseInt(parts[2]);  // nextSendIndex
+                    String nextReceiveTag = parts[3];  // nextSendTag
+                    String messageReceived = parts[4];
+
+                    System.out.println("MESSAGE ontvagen: " + messageReceived);
+                    System.out.println("Van: " + usernameSender);
+                    System.out.println("nextReceiveIndex: " + nextReceiveIndex);
+                    System.out.println("nextReceiveTag: " + nextReceiveTag);
+                    System.out.println("gebruikte tag: " + tag);
+                    System.out.println("messageReceived: " + messageReceived);
+
+                    String derivedSymKey = deriveSymKey(tag, symKeyBase64);
+
+                    // get time received to store in json
+                    LocalDateTime now = LocalDateTime.now();
+                    DateTimeFormatter sortableFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+                    String sortableDate = now.format(sortableFormat);
+
+                    jsonHandler.updateReceiveInfoChat(usernameSender, nextReceiveIndex, nextReceiveTag, derivedSymKey, messageReceived, sortableDate);
+
+                    indexesToFetch.remove(index);
+                    indexesToFetch.put(nextReceiveIndex, nextReceiveTag + ";" + usernameSender + ";friends");
+
+                    openChatWindows.get(usernameSender).receiveMessage(messageReceived);
+
                 } else {
                     System.out.println("In de if(!parts[0].equals(\"ID\")) statement met de assert false in fetchHandshakes");
                     assert false : "ERROR: message got in addPeriodicFetchOnIndexForID is not an ID message";
@@ -682,14 +757,177 @@ public class ClientMain {
         change = true;
     }
 
-    public void startChat(String userNameReceiver) {
+    // indexes to check of open chats
+    HashMap<String, ChatWindow> openChatWindows = new HashMap<>();
+
+    @SuppressWarnings("unchecked")
+    public void startChat(String userNameReceiver) throws RemoteException {
         System.out.println("Start chat with " + userNameReceiver);
+
+        JSONObject userInfo = jsonHandler.getPersonOfList(userNameReceiver, "friends");
+
+        // info to receive messages
+        int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
+        String receiveTag = (String) userInfo.get("receiveTag");
+
+        indexesToFetch.put(receiveIndex, receiveTag + ";" + userNameReceiver + ";friends");      
+        
+        if (bulletinBoard.isDeleted(receiveIndex)) {
+            return;
+        }
+
+        // info to send messages
+        int sendIndex = ((Long) userInfo.get("sendIndex")).intValue();
+        String sendTag = (String) userInfo.get("sendTag");
+        String encodedKeySend = (String) userInfo.get("symmetricKeySend");
+
         // ChatWindow chatWindow = new ChatWindow.getInstance(username, userNameReceiver, this);
-        ChatWindow chatWindow = ChatWindow.getInstance(username, userNameReceiver, this);
+        ChatWindow chatWindow = ChatWindow.getInstance(username, userNameReceiver, this, sendIndex, sendTag, encodedKeySend);
+
+        // inladen van de chatgeschiedenis
+        JSONArray chatHistory = jsonHandler.getChatHistory(userNameReceiver);
+        Map<String, String> unsortedMap = new HashMap<>();
+        for (Object obj : chatHistory) {
+            JSONObject chatMessage = (JSONObject) obj;
+            String message = (String) chatMessage.get("message");
+            String time = (String) chatMessage.get("time");
+            System.out.println("time: " + time);
+            System.out.println("message: " + message);
+            unsortedMap.put(time, message);
+        }
+
+        Map<String, String> sortedMap = new TreeMap<>(unsortedMap);
+
+
+        int oversized = sortedMap.size() - chatHistorySize;
+
+        if (oversized > 0) {
+            for (int i = 0; i < oversized; i++) {
+                sortedMap.remove(sortedMap.keySet().iterator().next());
+            }
+            // hashmap terug omzetten naar JSONArray
+            JSONArray chatHistoryNew = new JSONArray();
+            for (String time : sortedMap.keySet()) {
+                JSONObject chatMessage = new JSONObject();
+                chatMessage.put("time", time);
+                chatMessage.put("message", sortedMap.get(time));
+                chatHistoryNew.add(chatMessage);
+            }
+
+            jsonHandler.updateChatHistory(userNameReceiver, chatHistoryNew);
+        }
+
+        for (String time : sortedMap.keySet()) {
+            LocalDateTime dateTime = LocalDateTime.parse(time);
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy - HH'u'mm");
+            String formattedDate = dateTime.format(formatter);
+
+            String message = sortedMap.get(time);
+            String[] parts = message.split(";");
+
+            String sender = null;
+            if (parts[0].equals("SEND")) {
+                sender = username;
+            } else if (parts[0].equals("RECEIVE")) {
+                sender = userNameReceiver;
+            } else {
+                System.out.println("ERROR: message does not start with SEND or RECEIVE in startChat");
+                assert false;
+            }
+            
+
+            String bericht = formattedDate + " - " + sender + ": " + parts[1];
+            chatWindow.addMessage(bericht);
+        }
+        chatWindow.addMessage("Momenteel------------------------");
+
+
+        // chatwindow toevoegen aan de hashmap
+        openChatWindows.put(userNameReceiver, chatWindow);
     }
 
-    public void sendMessage(String sender, String receiver, String message) {
+    public int sendMessage(String userNameReceiver, String messageToSend, int sendIndex, String sendTag, String encodedKeySend, ChatWindow currentChat) throws Exception {
+        int nextSendIndex;
+        while(true) {
+            nextSendIndex = (int) (Math.random() * 999999);
+            if (bulletinBoard.reserveSpot(nextSendIndex)) {
+                break;
+            }
+        }
+        String nextSendTag = generateRandomTag(30);
+
+        String message = "MESSAGE;" + username + ";" + nextSendIndex + ";" + nextSendTag + ";" + messageToSend;
+        System.out.println("message to send in sendMessage(): " + message);
+        String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
+
+        String derivedSymKey = deriveSymKey(sendTag, encodedKeySend);
+
+        // get time received to store in json
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter sortableFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+        String sortableDate = now.format(sortableFormat);
+
+        // updaten in de json (gwn als backup)
+        jsonHandler.updateSendInfoChat(userNameReceiver, nextSendIndex, nextSendTag, derivedSymKey, messageToSend, sortableDate);
+
+        // updaten in de chatGUI
+        currentChat.setSendTag(nextSendTag);  // index geven we terug als returnwaarde -> garandeerd dat je nog geen bericht kan versturen tot het aangepast is
+        currentChat.setEncodedKeySend(derivedSymKey);
+
+        bulletinBoard.addMessage(sendIndex, encryptedMessage, sendTag);
+
+        return nextSendIndex;
+    }
+
+    public void closeChatWith(String userNameReceiver) {
+        System.out.println("Close chat with " + userNameReceiver);
         
+        // to receive messages
+        JSONObject userInfo = jsonHandler.getPersonOfList(userNameReceiver, "friends");
+
+        int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
+                    
+        String controle = indexesToFetch.remove(receiveIndex);
+        String controleUserName = controle.split(";")[1];
+        if(!controleUserName.equals(userNameReceiver)) {
+            System.out.println("In de if(!controleUserName.equals(userNameReceiver)) statement met de assert false in closeChatWith");
+            assert false : "ERROR: controleUserName does not match the userNameReceiver in closeChatWith";
+        }
+
+        openChatWindows.remove(userNameReceiver);
+    }
+
+
+
+    public void removeFriend(String friendName) throws Exception {
+        // Maak een bevestigingsvenster
+        int response = JOptionPane.showConfirmDialog(
+                null, 
+                "Wil je zeker " + friendName + " verwijderen als vriend??", 
+                "But are you sure?", 
+                JOptionPane.YES_NO_OPTION
+        );
+
+        // Controleer de gebruiker zijn keuze
+        if (response == JOptionPane.YES_OPTION) {
+            // Extra logica als de gebruiker "Yes" kiest
+            if (ChatWindow.getInstance(username, friendName, this, 0, "", "").isVisible()) {
+                ChatWindow.getInstance(username, friendName, this, 0, "", "").close();
+            }
+
+            JSONObject userInfo = jsonHandler.removeUserFromList(friendName, "friends");
+
+            int sendIndex = ((Long) userInfo.get("sendIndex")).intValue();
+
+            bulletinBoard.setDeleted(sendIndex);
+
+            change = true;
+
+            chatGUI.sendNotification("Je hebt " + friendName + " verwijderd als vriend.");
+        } else {
+            //Doe niets als de gebruiker "No" kiest
+            chatGUI.sendNotification("Verwijderen is geannuleerd.");
+        }
     }
 
     private void setBulletinBoard(BulletinBoardInterface bulletinBoard) {

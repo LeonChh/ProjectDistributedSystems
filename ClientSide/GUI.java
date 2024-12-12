@@ -58,6 +58,13 @@ public class GUI extends JPanel {
             e1.printStackTrace();
         }
     };
+    private ActionListener removeFriendListener = e -> {
+        try {
+            removeFriend(((JButton) e.getSource()).getClientProperty("userName").toString());
+        } catch (Exception e1) {
+            e1.printStackTrace();
+        }
+    };
 
     public GUI(String username, ClientMain client) {
         this.username = username;
@@ -136,7 +143,7 @@ public class GUI extends JPanel {
             ArrayList<String> friends = jsonHandler.getUserNamesOfList("friends");
 
             // Maak een NewPeopleList met de nieuwe mensen
-            NewPeopleList friendsList = new NewPeopleList(friends, chatListener, null, PersonWithButtons.ListElementTypes.CHAT);
+            NewPeopleList friendsList = new NewPeopleList(friends, chatListener, removeFriendListener, PersonWithButtons.ListElementTypes.CHAT);
 
             // Plaats de NewPeopleList in een JScrollPane zodat het scrollbaar is
             JScrollPane scrollPane = new JScrollPane(friendsList);
@@ -208,7 +215,7 @@ public class GUI extends JPanel {
             // Haal de bestaande JScrollPane op die de JList bevat
             JScrollPane scrollPaneFriends = (JScrollPane) friendsPanel.getComponent(1);  // Veronderstel dat de JScrollPane op index 1 staat
             NewPeopleList friendsList = (NewPeopleList) scrollPaneFriends.getViewport().getView();  // Verkrijg de NewPeopleList
-            friendsList.setNewPeopleList(friends, chatListener, null, PersonWithButtons.ListElementTypes.CHAT);  // Werk de JList bij
+            friendsList.setNewPeopleList(friends, chatListener, removeFriendListener, PersonWithButtons.ListElementTypes.CHAT);  // Werk de JList bij
 
             scrollPaneFriends.revalidate();  // Herteken de JScrollPane
             scrollPaneFriends.repaint();     // Herverf de JScrollPane
@@ -268,6 +275,11 @@ public class GUI extends JPanel {
     private void startChat(String person) throws Exception {
         sendNotification("Chat gestart met " + person);
         client.startChat(person);
+    }
+
+    private void removeFriend(String person) throws Exception {
+        sendNotification(person + " is verwijderd uit de lijst van vrienden");
+        client.removeFriend(person);
     }
 
     // Methode om het bericht te verzenden
