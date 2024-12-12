@@ -126,8 +126,8 @@ public class ClientMain {
         if (!file.exists()) {
             file.createNewFile();
             jsonHandler = new JsonHandler(filename);
-            createNewUser(bulletinBoard);
-            addAllSubscribers(bulletinBoard);
+            createNewUser();
+            addAllSubscribers();
 
             // Maak een nieuw JFrame voor de chat GUI (in plaats van het inlogpaneel)
             this.setGUI(new GUI(username, this));
@@ -160,7 +160,6 @@ public class ClientMain {
 
             JSONObject userInfo = (JSONObject) userObject.get(userNameOtherSubscriber);
 
-            System.out.println("User: " + userNameOtherSubscriber);
             int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
             
             String receiveTag = (String) userInfo.get("receiveTag");
@@ -175,7 +174,6 @@ public class ClientMain {
 
             JSONObject userInfo = (JSONObject) userObject.get(userNameOtherSubscriber);
 
-            System.out.println("User: " + userNameOtherSubscriber);
             int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
             
             String receiveTag = (String) userInfo.get("receiveTag");
@@ -190,7 +188,6 @@ public class ClientMain {
 
             JSONObject userInfo = (JSONObject) userObject.get(userNameOtherSubscriber);
 
-            System.out.println("User: " + userNameOtherSubscriber);
             int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
             
             String receiveTag = (String) userInfo.get("receiveTag");
@@ -205,7 +202,6 @@ public class ClientMain {
 
             JSONObject userInfo = (JSONObject) userObject.get(nameFriend);
 
-            System.out.println("User: " + nameFriend);
             int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
             
             if (bulletinBoard.isOccupied(receiveIndex)) {
@@ -229,7 +225,6 @@ public class ClientMain {
         scheduler = Executors.newScheduledThreadPool(1);  // Maak een threadpool
         scheduler.scheduleAtFixedRate(() -> {
             try {
-                System.out.println("indexToFetch: " + indexesToFetch);
                 lookForNewFriends();
                 fetchAndUpdateData();
                 if (change) {
@@ -314,7 +309,11 @@ public class ClientMain {
             jsonHandler.addUserToList(usernameNewPerson, newPersonSubscribedInfo, "newPeople");
             indexesToFetch.put(receiveIndex, receiveTag + ";" + usernameNewPerson + ";newPeople");
 
-            jsonHandler.addNewUserName(usernameNewPerson);
+            if (jsonHandler.containsUserName(usernameNewPerson)){
+                jsonHandler.removeUserFromList(usernameNewPerson, "friends");
+            } else {
+                jsonHandler.addNewUserName(usernameNewPerson);
+            }
 
             answerToNewUser(usernameNewPerson, newPersonSubscribedInfo);
 
@@ -323,7 +322,7 @@ public class ClientMain {
     }
 
     @SuppressWarnings("unchecked")
-    private void createNewUser(BulletinBoardInterface bulletinBoard) throws IOException, NoSuchAlgorithmException{
+    private void createNewUser() throws IOException, NoSuchAlgorithmException{
         JSONObject jsonObject = new JSONObject();
 
         KeyPair userKeyPair = generateRSAKeyPair();
@@ -345,7 +344,6 @@ public class ClientMain {
 
 
         jsonHandler.writeJsonFile(jsonObject);
-        System.out.println("Keys successfully saved to the file.");
         
         // toevoegen van de gebruiker aan de server
         byte[] userHashBytes = digestSHA256.digest(username.getBytes());
@@ -359,7 +357,7 @@ public class ClientMain {
     }
 
     @SuppressWarnings("unchecked")
-    private void addAllSubscribers(BulletinBoardInterface bulletinBoard) throws Exception {
+    private void addAllSubscribers() throws Exception {
         // lees alle gebruikers in
         HashMap<String, String> subscribers = bulletinBoard.getSubscribers();
 
@@ -369,7 +367,6 @@ public class ClientMain {
                 continue;
             }
 
-            System.out.println("Bezig met toevoegen van " + userNameOtherSubscriber + "...");
             // genereer een random tag
             String sendTag = generateRandomTag(30);
             String receiveTag = generateRandomTag(30);
@@ -380,16 +377,16 @@ public class ClientMain {
                 if (bulletinBoard.reserveSpot(sendIndex)) {
                     break;
                 }
-                // System.out.println("Random integer: " + randomIndex);
             }
+            System.out.println(username + " een index gereserveerd voor communicatie met " + userNameOtherSubscriber + ". Index = " + sendIndex);
             int receiveIndex;
             while (true) {
                 receiveIndex = (int) (Math.random() * 999999);
                 if (bulletinBoard.reserveSpot(receiveIndex)) {
                     break;
                 }
-                // System.out.println("Random integer: " + randomIndex);
             }
+            System.out.println(username + " een index gereserveerd voor communicatie met " + userNameOtherSubscriber + ". Index = " + receiveIndex);
             // bericht opstellen
             String originalMessage = username + ";" + sendIndex + ";" + sendTag + ";" + receiveIndex + ";" + receiveTag;
 
@@ -435,8 +432,12 @@ public class ClientMain {
             
     }
 
+    ArrayList<Integer> indexesToDelete = new ArrayList<>();
     @SuppressWarnings("unchecked")
     private void fetchAndUpdateData() throws Exception {
+        for (int deleteIndex : indexesToDelete) {
+            indexesToFetch.remove(deleteIndex);
+        }
         for (int index : indexesToFetch.keySet()) {
             String[] infoAboutFetch = indexesToFetch.get(index).split(";");
             String tag = infoAboutFetch[0];
@@ -455,15 +456,36 @@ public class ClientMain {
 
                 chatGUI.sendNotification(userNameSender + " heeft je verwijderd!");
 
+                if (ChatWindow.getInstance(username, userNameSender, this, 0, "", "").isVisible()) {
+                    ChatWindow.getInstance(username, userNameSender, this, 0, "", "").close();
+                }
+
+                indexesToFetch.remove(index);
+
                 change = true;
+
+                return;
+            }
+
+            if (bulletinBoard.isEmpty(index)) {
+                recoverCorruptCommunication(userNameSender, listName, "index");
+                indexesToDelete.add(index);
+                break;
+            }
+
+            if (!bulletinBoard.hasMessage(index)) {
+                continue;
             }
             
             String message = bulletinBoard.getMessage(index, tag);
-            System.out.println("Message opgehaald : " + message);
             if (message != null) {
                 String symKeyBase64 = jsonHandler.getSymmetricKeyReceiveFromList(userNameSender, listName);
-                String decryptedMessage = decryptMessageWithAES(message, symKeyBase64);
-                System.out.println("Decrypted message: " + decryptedMessage);
+                String decryptedMessage = decryptMessageWithAES(message, symKeyBase64, userNameSender, listName);
+                if (decryptedMessage.equals("Corrupt")){
+                    recoverCorruptCommunication(userNameSender, listName, "Symmetric key");
+                    indexesToDelete.add(index);
+                    break;
+                }
                 String[] parts = decryptedMessage.split(";");
                     
                 if (parts[0].equals("ID")) {
@@ -490,7 +512,9 @@ public class ClientMain {
 
                     jsonHandler.updateReceiveInfo(usernameSender, nextReceiveIndex, nextReceiveTag, derivedSymKey ,"newPeople");
 
-                    jsonHandler.addNewUserName(usernameSender);
+                    if (!jsonHandler.containsUserName(usernameSender)){
+                        jsonHandler.addNewUserName(usernameSender);
+                    }
 
                     change = true;
 
@@ -522,7 +546,6 @@ public class ClientMain {
                     indexesToFetch.remove(index);
 
                 } else if (parts[0].equals("REMOVE")) {
-                    System.out.println("In de if(parts[0].equals(\"REMOVE\")) statement in fetchAndUpdateData");
                     JSONObject userRemoveInfo = jsonHandler.removeUserFromList(userNameSender, "newPeople");
 
                     int receiveIndex = ((Long) userRemoveInfo.get("receiveIndex")).intValue();
@@ -535,8 +558,6 @@ public class ClientMain {
 
                     indexesToFetch.remove(index);
                 } else if (parts[0].equals("ACCEPT")) {
-                    System.out.println("In de if(parts[0].equals(\"ACCEPT\")) statement in fetchAndUpdateData");
-
                     String usernameSender = parts[1];  // username
                     int nextReceiveIndex = Integer.parseInt(parts[2]);  // nextSendIndex
                     String nextReceiveTag = parts[3];  // nextSendTag
@@ -555,7 +576,6 @@ public class ClientMain {
 
                     indexesToFetch.remove(index);
                 } else if (parts[0].equals("DECLINE")) {
-                    System.out.println("In de if(parts[0].equals(\"DECLINE\")) statement in fetchAndUpdateData");
                     JSONObject userRemoveInfo = jsonHandler.removeUserFromList(userNameSender, "inAfwachting");
 
                     int receiveIndex = ((Long) userRemoveInfo.get("receiveIndex")).intValue();
@@ -572,13 +592,6 @@ public class ClientMain {
                     int nextReceiveIndex = Integer.parseInt(parts[2]);  // nextSendIndex
                     String nextReceiveTag = parts[3];  // nextSendTag
                     String messageReceived = parts[4];
-
-                    System.out.println("MESSAGE ontvagen: " + messageReceived);
-                    System.out.println("Van: " + usernameSender);
-                    System.out.println("nextReceiveIndex: " + nextReceiveIndex);
-                    System.out.println("nextReceiveTag: " + nextReceiveTag);
-                    System.out.println("gebruikte tag: " + tag);
-                    System.out.println("messageReceived: " + messageReceived);
 
                     String derivedSymKey = deriveSymKey(tag, symKeyBase64);
 
@@ -598,11 +611,113 @@ public class ClientMain {
                     System.out.println("In de if(!parts[0].equals(\"ID\")) statement met de assert false in fetchHandshakes");
                     assert false : "ERROR: message got in addPeriodicFetchOnIndexForID is not an ID message";
                 }
+            } else {
+                chatGUI.sendNotification("De tag is corrupt van ." + userNameSender);
+                recoverCorruptCommunication(userNameSender, listName, "tag");
+                indexesToDelete.add(index);
+                break;
             }
         }
                 
     }
 
+    private void recoverCorruptCommunication(String usernameCorrupt, String listName, String type) throws Exception {
+        if (ChatWindow.getInstance(username, usernameCorrupt, this, 0, "", "").isVisible()) {
+            ChatWindow.getInstance(username, usernameCorrupt, this, 0, "", "").close();
+        }
+
+        int response = JOptionPane.showConfirmDialog(
+                null, 
+                "De communicatie met " + usernameCorrupt + " is corrupt (fout: " + type + "). Wil je deze herinitialiseren? Deze persoon komt in New People te staan als hij/zij online is.", 
+                "Corrupt communication", 
+                JOptionPane.YES_NO_OPTION
+        );
+
+        // Controleer de gebruiker zijn keuze
+        if (response == JOptionPane.YES_OPTION) {
+            // verwijder eerst de gebruiker uit de lijst
+            jsonHandler.removeUserFromList(usernameCorrupt, listName);
+
+            // haal dit op voor de public key van de andere persoon te weten. Door alles op te halen extra veilig?
+            HashMap<String, String> subscribers = bulletinBoard.getSubscribers();
+
+            // genereer een random tag
+            String sendTag = generateRandomTag(30);
+            String receiveTag = generateRandomTag(30);
+            // genereer een random Integer = index, checken of deze niet in gebruik is
+            int sendIndex;
+            while (true) {
+                sendIndex = (int) (Math.random() * 999999);
+                if (bulletinBoard.reserveSpot(sendIndex)) {
+                    break;
+                }
+            }
+            System.out.println(username + " een index gereserveerd voor communicatie met " + usernameCorrupt + ". Index = " + sendIndex);
+            int receiveIndex;
+            while (true) {
+                receiveIndex = (int) (Math.random() * 999999);
+                if (bulletinBoard.reserveSpot(receiveIndex)) {
+                    break;
+                }
+            }
+            System.out.println(username + " een index gereserveerd voor communicatie met " + usernameCorrupt + ". Index = " + receiveIndex);
+
+            // bericht opstellen
+            String originalMessage = username + ";" + sendIndex + ";" + sendTag + ";" + receiveIndex + ";" + receiveTag;
+
+            // opslaan voor jezelf
+            JSONObject newFriend = new JSONObject();
+            newFriend.put("sendIndex", sendIndex);
+            newFriend.put("sendTag", sendTag);
+            newFriend.put("receiveIndex", receiveIndex);
+            newFriend.put("receiveTag", receiveTag);
+
+            JSONObject jsonObject = jsonHandler.readJsonFile();
+            // Verkrijg de waarde van de private key
+            String privateKeyBase64 = (String) jsonObject.get("privateKey");
+            byte[] privateKeyBytes = Base64.getDecoder().decode(privateKeyBase64);
+            PrivateKey privateKey = KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(privateKeyBytes));
+
+            byte[] signedMessage = signMessage(originalMessage, privateKey); // SK_A
+
+            // encrypts signed message with symmetric key
+            SecretKey symmetricKeySend = generateAESKey();
+            SecretKey symmetricKeyReceive = generateAESKey();
+            byte[] encryptedMessage = encryptMessageAndSignatureWithAES(originalMessage, signedMessage, symmetricKeySend);
+
+            String encodedKeySend = Base64.getEncoder().encodeToString(symmetricKeySend.getEncoded());
+            String encodedKeyReceive = Base64.getEncoder().encodeToString(symmetricKeyReceive.getEncoded());
+            newFriend.put("symmetricKeySend", encodedKeySend);
+            newFriend.put("symmetricKeyReceive", encodedKeyReceive);
+
+            // indien username nog nier gehashed, eerst doen
+            if (!isHashedUsername(usernameCorrupt)) {
+                usernameCorrupt = hashUserName(usernameCorrupt);
+            } 
+
+            jsonHandler.addUserToList(usernameCorrupt, newFriend, "waitingHandShake");
+            indexesToFetch.put(receiveIndex, receiveTag + ";" + usernameCorrupt + ";waitingHandShake");
+
+            // encrypts symmetric key with receiver's public key 
+            String publicKeyOtherUserBase64 = subscribers.get(usernameCorrupt);
+            byte[] publicKeyOtherUserBytes = Base64.getDecoder().decode(publicKeyOtherUserBase64);
+            PublicKey publicKeyOther = KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(publicKeyOtherUserBytes));
+            byte[] encryptedSymmetricKeySend = encryptSymmetricKeyWithRSA(symmetricKeySend, publicKeyOther);
+            byte[] encryptedSymmetricKeyReceive = encryptSymmetricKeyWithRSA(symmetricKeyReceive, publicKeyOther);
+        
+            // send key to user
+            String publicKeyBase64 = (String) jsonObject.get("publicKey");
+            bulletinBoard.addNewFriendTo(usernameCorrupt, Base64.getEncoder().encodeToString(encryptedSymmetricKeyReceive), Base64.getEncoder().encodeToString(encryptedSymmetricKeySend), Base64.getEncoder().encodeToString(encryptedMessage), publicKeyBase64);
+            
+            change = true;
+            
+            return;
+        } else {
+            //Doe niets als de gebruiker "No" kiest
+            chatGUI.sendNotification("Communicatie met " + usernameCorrupt + " blijft corrupt.");
+        }
+    }
+    
     private static String generateRandomTag(int length) {
         String characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"; // Mogelijke karakters
         StringBuilder tag = new StringBuilder();
@@ -628,6 +743,8 @@ public class ClientMain {
                 break;
             }
         }
+        System.out.println(username + " een index gereserveerd voor communicatie met " + usernameNewPerson + ". Index = " + nextSendIndex);
+
         String nextSendTag = generateRandomTag(30);
 
         String message = "ID;" + username + ";" + hashUserName(username) + ";" + nextSendIndex + ";" + nextSendTag;
@@ -635,12 +752,9 @@ public class ClientMain {
 
         String derivedSymKey = deriveSymKey(sendTag, encodedKeySend);
 
-
-        System.out.println("next send index net voor update: " + nextSendIndex);
-        System.out.println("next send tag net voor update: " + nextSendTag);
-        System.out.println("derivedSymKey net voor update: " + derivedSymKey);
         jsonHandler.updateSendInfo(usernameNewPerson, nextSendIndex, nextSendTag, derivedSymKey ,"newPeople");
-
+        
+        System.out.println(username + " heeft een bericht gestuurd naar " + usernameNewPerson + " op de index " + sendIndex);
         bulletinBoard.addMessage(sendIndex, encryptedMessage, sendTag);
     }
 
@@ -661,6 +775,8 @@ public class ClientMain {
                 break;
             }
         }
+        System.out.println(username + " een index gereserveerd voor communicatie met " + userNameReceiver + ". Index = " + nextSendIndex);
+
         String nextSendTag = generateRandomTag(30);
 
         String message = "REQUEST;" + username + ";" + nextSendIndex + ";" + nextSendTag;
@@ -677,6 +793,7 @@ public class ClientMain {
 
         jsonHandler.updateSendInfo(userNameReceiver, nextSendIndex, nextSendTag, derivedSymKey ,"inAfwachting");
 
+        System.out.println(username + " heeft een bericht gestuurd naar " + userNameReceiver + " op de index " + sendIndex);
         bulletinBoard.addMessage(sendIndex, encryptedMessage, sendTag);
 
         change = true;
@@ -694,6 +811,7 @@ public class ClientMain {
         String message = "REMOVE;" + ";" + username + ";" + 0;
         String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
 
+        System.out.println(username + " heeft een bericht gestuurd naar " + userNameReceiver + " op de index " + sendIndex);
         bulletinBoard.addMessage(sendIndex, encryptedMessage, sendTag);
 
         indexesToFetch.remove(sendIndex);
@@ -717,6 +835,8 @@ public class ClientMain {
                 break;
             }
         }
+        System.out.println(username + " een index gereserveerd voor communicatie met " + userNameReceiver + ". Index = " + nextSendIndex);
+
         String nextSendTag = generateRandomTag(30);
 
         String message = "ACCEPT;" + username + ";" + nextSendIndex + ";" + nextSendTag;
@@ -732,6 +852,7 @@ public class ClientMain {
 
         jsonHandler.updateSendInfo(userNameReceiver, nextSendIndex, nextSendTag, derivedSymKey ,"friends");
 
+        System.out.println(username + " heeft een bericht gestuurd naar " + userNameReceiver + " op de index " + sendIndex);
         bulletinBoard.addMessage(sendIndex, encryptedMessage, sendTag);
 
         change = true;
@@ -748,7 +869,8 @@ public class ClientMain {
 
         String message = "DECLINE;" + ";" + username + ";" + 0;
         String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
-
+        
+        System.out.println(username + " heeft een bericht gestuurd naar " + userNameReceiver + " op de index " + sendIndex);
         bulletinBoard.addMessage(sendIndex, encryptedMessage, sendTag);
 
         indexesToFetch.remove(sendIndex);
@@ -761,20 +883,31 @@ public class ClientMain {
     HashMap<String, ChatWindow> openChatWindows = new HashMap<>();
 
     @SuppressWarnings("unchecked")
-    public void startChat(String userNameReceiver) throws RemoteException {
-        System.out.println("Start chat with " + userNameReceiver);
-
+    public void startChat(String userNameReceiver) throws RemoteException {    
         JSONObject userInfo = jsonHandler.getPersonOfList(userNameReceiver, "friends");
 
         // info to receive messages
         int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
         String receiveTag = (String) userInfo.get("receiveTag");
-
-        indexesToFetch.put(receiveIndex, receiveTag + ";" + userNameReceiver + ";friends");      
-        
+            
         if (bulletinBoard.isDeleted(receiveIndex)) {
+            JSONObject userRemoveInfo = jsonHandler.removeUserFromList(userNameReceiver, "friends");
+
+            int receiveIndexDup = ((Long) userRemoveInfo.get("receiveIndex")).intValue();
+            int sendIndex = ((Long) userRemoveInfo.get("sendIndex")).intValue();
+    
+            bulletinBoard.clearSpot(receiveIndexDup);
+            bulletinBoard.clearSpot(sendIndex);
+
+            chatGUI.sendNotification(userNameReceiver + " heeft je verwijderd!");
+
+            change = true;
+
             return;
         }
+        
+
+        indexesToFetch.put(receiveIndex, receiveTag + ";" + userNameReceiver + ";friends");      
 
         // info to send messages
         int sendIndex = ((Long) userInfo.get("sendIndex")).intValue();
@@ -791,8 +924,6 @@ public class ClientMain {
             JSONObject chatMessage = (JSONObject) obj;
             String message = (String) chatMessage.get("message");
             String time = (String) chatMessage.get("time");
-            System.out.println("time: " + time);
-            System.out.println("message: " + message);
             unsortedMap.put(time, message);
         }
 
@@ -854,10 +985,11 @@ public class ClientMain {
                 break;
             }
         }
+        System.out.println(username + " een index gereserveerd voor communicatie met " + userNameReceiver + ". Index = " + nextSendIndex);
+
         String nextSendTag = generateRandomTag(30);
 
         String message = "MESSAGE;" + username + ";" + nextSendIndex + ";" + nextSendTag + ";" + messageToSend;
-        System.out.println("message to send in sendMessage(): " + message);
         String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
 
         String derivedSymKey = deriveSymKey(sendTag, encodedKeySend);
@@ -873,15 +1005,14 @@ public class ClientMain {
         // updaten in de chatGUI
         currentChat.setSendTag(nextSendTag);  // index geven we terug als returnwaarde -> garandeerd dat je nog geen bericht kan versturen tot het aangepast is
         currentChat.setEncodedKeySend(derivedSymKey);
-
+        
+        System.out.println(username + " heeft een bericht gestuurd naar " + userNameReceiver + " op de index " + sendIndex);
         bulletinBoard.addMessage(sendIndex, encryptedMessage, sendTag);
 
         return nextSendIndex;
     }
 
-    public void closeChatWith(String userNameReceiver) {
-        System.out.println("Close chat with " + userNameReceiver);
-        
+    public void closeChatWith(String userNameReceiver) {            
         // to receive messages
         JSONObject userInfo = jsonHandler.getPersonOfList(userNameReceiver, "friends");
 
@@ -918,6 +1049,13 @@ public class ClientMain {
             JSONObject userInfo = jsonHandler.removeUserFromList(friendName, "friends");
 
             int sendIndex = ((Long) userInfo.get("sendIndex")).intValue();
+            int receiveIndex = ((Long) userInfo.get("receiveIndex")).intValue();
+
+            if (indexesToFetch.containsKey(receiveIndex)) {
+                indexesToFetch.remove(receiveIndex);
+            } else if (indexesToFetch.containsKey(sendIndex)) {
+                indexesToFetch.remove(sendIndex);
+            }
 
             bulletinBoard.setDeleted(sendIndex);
 
@@ -978,7 +1116,6 @@ public class ClientMain {
         byte[] derivedKeyBytes = factory.generateSecret(spec).getEncoded();
 
         // Print de afgeleide sleutel
-        System.out.println("Afgeleide sleutel: " + Base64.getEncoder().encodeToString(derivedKeyBytes));
         return Base64.getEncoder().encodeToString(derivedKeyBytes);
     }
 
@@ -1003,22 +1140,26 @@ public class ClientMain {
         return cipher.doFinal(combined.getBytes(StandardCharsets.UTF_8));
     }
 
-    public static String decryptMessageWithAES(String encryptedMessage, String base64encodedKey) throws Exception {
-        byte[] decodedKeyBytes = Base64.getDecoder().decode(base64encodedKey);
-        SecretKey symmetricKey = new SecretKeySpec(decodedKeyBytes, 0, decodedKeyBytes.length, "AES");
+    public static String decryptMessageWithAES(String encryptedMessage, String base64encodedKey, String userNameSender, String listName) throws Exception {
+        try {
+            byte[] decodedKeyBytes = Base64.getDecoder().decode(base64encodedKey);
+            SecretKey symmetricKey = new SecretKeySpec(decodedKeyBytes, 0, decodedKeyBytes.length, "AES");
 
-        // Initialiseer een AES Cipher in DECRYPT_MODE
-        Cipher cipher = Cipher.getInstance("AES");
-        cipher.init(Cipher.DECRYPT_MODE, symmetricKey);
-    
-        // Decodeer de Base64-gecodeerde string naar een byte[]
-        byte[] decodedBytes = Base64.getDecoder().decode(encryptedMessage);
-    
-        // Ontsleutel de bytes
-        byte[] decryptedBytes = cipher.doFinal(decodedBytes);
-    
-        // Zet de gedecrypteerde bytes om naar een string
-        return new String(decryptedBytes, StandardCharsets.UTF_8);
+            // Initialiseer een AES Cipher in DECRYPT_MODE
+            Cipher cipher = Cipher.getInstance("AES");
+            cipher.init(Cipher.DECRYPT_MODE, symmetricKey);
+        
+            // Decodeer de Base64-gecodeerde string naar een byte[]
+            byte[] decodedBytes = Base64.getDecoder().decode(encryptedMessage);
+        
+            // Ontsleutel de bytes
+            byte[] decryptedBytes = cipher.doFinal(decodedBytes);
+        
+            // Zet de gedecrypteerde bytes om naar een string
+            return new String(decryptedBytes, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return "Corrupt";
+        }
     }
 
     public static String encryptMessageWithAES(String message, String base64encodedKey) throws Exception {
@@ -1070,5 +1211,23 @@ public class ClientMain {
         sig.initVerify(publicKey);
         sig.update(hash);
         return sig.verify(signature);
+    }
+
+    public static boolean isBase64Encoded(String str) {
+        try {
+            // Probeer de string te decoderen. Als het geen geldige Base64 is, zal dit een exception veroorzaken.
+            java.util.Base64.getDecoder().decode(str);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+    
+    public static boolean isHashedUsername(String userNameOrHash) {
+        // Controleer of de lengte overeenkomt met een Base64-gecodeerde SHA-256 hash (44 tekens)
+        if (userNameOrHash.length() == 44 && isBase64Encoded(userNameOrHash)) {
+            return true;  // Waarschijnlijk een gehashte gebruikersnaam
+        }
+        return false;  // Waarschijnlijk een normale gebruikersnaam
     }
 }

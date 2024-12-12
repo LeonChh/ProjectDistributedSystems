@@ -19,4 +19,6 @@ public interface BulletinBoardInterface extends Remote {
     boolean isOccupied(int index) throws RemoteException;
     boolean isDeleted(int index) throws RemoteException;
     boolean setDeleted(int index) throws RemoteException;
+    boolean hasMessage(int index) throws RemoteException;
+    boolean isEmpty(int index) throws RemoteException;
 }

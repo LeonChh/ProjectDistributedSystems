@@ -12,8 +12,10 @@ public class ServerMain {
 
         try {
             Registry registry = LocateRegistry.createRegistry(PORT);
-            registry.rebind("BulletinBoard", new BulletinBoardImpl(BULLETIN_BOARD_SIZE));
+            BulletinBoardImpl impl = new BulletinBoardImpl(BULLETIN_BOARD_SIZE);
+            registry.rebind("BulletinBoard", impl);
             System.out.println("BulletinBoard is ready");
+            impl.startCLI();
         } catch (Exception e) {
             e.printStackTrace();
         }

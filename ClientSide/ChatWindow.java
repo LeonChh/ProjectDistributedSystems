@@ -151,6 +151,7 @@ public class ChatWindow {
 
     public void close() {
         frame.dispose();
+        instances.remove(sender + "->" + receiver);
     }
 
     public boolean isVisible() {

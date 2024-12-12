@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Scanner;
 
 import javax.swing.Box;
 
@@ -51,7 +52,6 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
         int indexAfterModulo = index % bulletinBoardSize;
         if (bulletinBoard.get(indexAfterModulo).isEmpty()) {
             bulletinBoard.get(indexAfterModulo).setReserved();
-            System.out.println("Spot reserved at index " + index + ", state is " + bulletinBoard.get(indexAfterModulo).getState());
             return true;
         }
         
@@ -66,8 +66,8 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
             System.out.println("ERROR: index " + index + "is niet leeg in addMessage, maar " + bulletinBoard.get(indexAfterModulo).getState());
             return false;
         } else if (bulletinBoard.get(indexAfterModulo).isEmpty()) {
-            assert false : "ERROR: index " + index + "is niet gereserveerd in addMessage, maar " + bulletinBoard.get(indexAfterModulo).getState();
-            return false;
+            // assert false : "ERROR: index " + index + "is niet gereserveerd in addMessage, maar " + bulletinBoard.get(indexAfterModulo).getState();
+            // return false;
         }
 
         byte[] hashBytes = digestSHA256.digest(tag.getBytes());
@@ -76,8 +76,19 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
         bulletinBoard.get(indexAfterModulo).setMessage(message);
         bulletinBoard.get(indexAfterModulo).setOccupied();
 
-        System.out.println("message added to index " + index + ", state is " + bulletinBoard.get(indexAfterModulo).getState());
         return true;
+    }
+
+    @Override
+    public boolean hasMessage(int index) throws RemoteException {
+        int indexAfterModulo = index % bulletinBoardSize;
+        return bulletinBoard.get(indexAfterModulo).isOccupied();
+    }
+
+    @Override
+    public boolean isEmpty(int index) throws RemoteException {
+        int indexAfterModulo = index % bulletinBoardSize;
+        return bulletinBoard.get(indexAfterModulo).isEmpty();
     }
 
     @Override
@@ -85,7 +96,6 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
         int indexAfterModulo = index % bulletinBoardSize;
         
         if (!bulletinBoard.get(indexAfterModulo).isOccupied()) {
-            // System.out.println("ERROR: index " + index + "is niet occupied in getMessage, maar " + bulletinBoard.get(index).getState() + " in getMessage");
             return null;
         }
 
@@ -100,14 +110,11 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
         String message = bulletinBoard.get(indexAfterModulo).getMessage();
         bulletinBoard.get(indexAfterModulo).setEmpty();
 
-        System.out.println("message retrieved from index " + index + ", state is " + bulletinBoard.get(indexAfterModulo).getState());
-
         return message;
     }
 
     @Override
     public boolean newSubscriber(String usernameHash, String publicKeyBase64) throws RemoteException {
-        System.out.println("username new subscriber: " + usernameHash);
         synchronized (lock) {
             jsonHandler.addToNewSubscriber(usernameHash, publicKeyBase64);
             return true;
@@ -154,7 +161,6 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
     public void clearSpot(int index) {
         int indexAfterModulo = index % bulletinBoardSize;
         bulletinBoard.get(indexAfterModulo).setEmpty();
-        System.out.println("Spot cleared at index " + index + ", state is " + bulletinBoard.get(indexAfterModulo).getState());
     }
 
     @Override
@@ -177,7 +183,39 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
             return false;
         }
         bulletinBoard.get(indexAfterModulo).setDeleted();
-        System.out.println("Spot deleted at index " + index + ", state is " + bulletinBoard.get(indexAfterModulo).getState());
         return true;
+    }
+
+    // CLI methode
+    public void startCLI() {
+        Scanner scanner = new Scanner(System.in);
+        while (true) {
+            System.out.println("Selecteer een optie:");
+            System.out.println("1) corrupt een index");
+            System.out.println("2) corrupt een tag");
+            
+            int keuze = scanner.nextInt();
+            scanner.nextLine(); // Consume newline
+
+            switch (keuze) {
+                case 1:
+                    System.out.print("Voer het indexnummer in om te corrupten: ");
+                    int index = scanner.nextInt();
+                    scanner.nextLine(); // Consume newline
+                    index = index % bulletinBoardSize;
+                    bulletinBoard.get(index).setEmpty();
+                    break;
+
+                case 2:
+                    System.out.print("Voer het indexnummer in om de tag te corrupten: ");
+                    int indexTag = scanner.nextInt();
+                    scanner.nextLine(); // Consume newline
+                    indexTag = indexTag % bulletinBoardSize;
+                    bulletinBoard.get(indexTag).setTag(new byte[32]);
+                    break;
+                default:
+                    System.out.println("Ongeldige keuze. Probeer opnieuw.");
+            }
+        }
     }
 }

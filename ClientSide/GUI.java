@@ -205,7 +205,7 @@ public class GUI extends JPanel {
     // Methode voor de refresh actie
     private void refreshPanel(String panelTitle) throws Exception {
         if (panelTitle.equals("Notifications")) {
-            System.out.println("No new notifications");;
+            
         } else if (panelTitle.equals("Friends")) {
             ArrayList<String> friends = jsonHandler.getUserNamesOfList("friends");  // Verkrijg de nieuwe mensen
 

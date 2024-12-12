@@ -117,11 +117,34 @@ public class JsonHandler {
         writeJsonFile(jsonObject); // Schrijf het bijgewerkte JSON-object terug naar het bestand
     }
 
+    public void removeUserName(String userName) {
+        JSONObject jsonObject = readJsonFile(); // Leest het huidige JSON-bestand
+        if (jsonObject == null) {
+            jsonObject = new JSONObject(); // Maak een nieuw JSON-object als het bestand leeg is
+        }
+        
+        JSONArray userNames = (JSONArray) jsonObject.get("allUserNames");
+        userNames.remove(userName);
+        
+        writeJsonFile(jsonObject); // Schrijf het bijgewerkte JSON-object terug naar het bestand
+    }
+
+    public boolean containsUserName(String userName) {
+        JSONObject jsonObject = readJsonFile();
+        JSONArray userNames = (JSONArray) jsonObject.get("allUserNames");
+
+        for (int i = 0; i < userNames.size(); i++) {
+            if (userNames.get(i).equals(userName)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public JSONObject removeUserFromList(String userName, String listName) {
         JSONObject jsonObject = readJsonFile();
         JSONArray listGiven = (JSONArray) jsonObject.get(listName);
-
-        System.out.println("removeUserFromList: user to remove: " + userName);
 
         for (int i = 0; i < listGiven.size(); i++) {
             JSONObject listElement = (JSONObject) listGiven.get(i);
@@ -130,7 +153,6 @@ public class JsonHandler {
                 if (userNameKey.equals(userName)) {
                     JSONObject friendInfo = (JSONObject) listElement.get(userName);
                     listGiven.remove(i);
-                    System.out.println("removeUserFromList: removed" + userName);
                     writeJsonFile(jsonObject);
                     return friendInfo;
                 }
@@ -179,7 +201,6 @@ public class JsonHandler {
             JSONObject friend = (JSONObject) listGiven.get(i);
             for (Object key : friend.keySet()) {
                 String userName = (String) key;
-                System.out.println("in updateSendInfo username: " + userName + ", usernameSearch: " + usernameGiven);
                 if (userName.equals(usernameGiven)) {
                     JSONObject friendInfo = (JSONObject) friend.get(userName);
                     friendInfo.put("sendIndex", nextSendIndex);
@@ -204,7 +225,6 @@ public class JsonHandler {
             JSONObject friend = (JSONObject) listGiven.get(i);
             for (Object key : friend.keySet()) {
                 String userName = (String) key;
-                System.out.println("in updateSendInfoChat username: " + userName + ", usernameSearch: " + usernameGiven);
                 if (userName.equals(usernameGiven)) {
                     JSONObject timeMessage = new JSONObject();
                     timeMessage.put("time", Date);
@@ -349,17 +369,12 @@ public class JsonHandler {
             
         }
 
-        System.out.println("JsonHandler: getList " + listName + " : " + newAskedList);
-
         return newAskedList;
     }
 
     public JSONObject getPersonOfList(String userName, String listName){ 
         JSONObject jsonObject = readJsonFile();
         JSONArray newPeopleJson = (JSONArray) jsonObject.get(listName);
-
-        System.out.println("Person searching for in list " + listName + " : " + userName);
-        System.out.println("getPersonOfList: " + newPeopleJson);
 
         for (int i = 0; i < newPeopleJson.size(); i++) {
             JSONObject newPerson = (JSONObject) newPeopleJson.get(i);
