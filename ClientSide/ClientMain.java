@@ -374,7 +374,8 @@ public class ClientMain {
             int sendIndex;
             while (true) {
                 sendIndex = (int) (Math.random() * 999999);
-                if (bulletinBoard.reserveSpot(sendIndex)) {
+                sendIndex = bulletinBoard.reserveSpot(sendIndex);
+                if (sendIndex != -1) {
                     break;
                 }
             }
@@ -382,7 +383,8 @@ public class ClientMain {
             int receiveIndex;
             while (true) {
                 receiveIndex = (int) (Math.random() * 999999);
-                if (bulletinBoard.reserveSpot(receiveIndex)) {
+                receiveIndex = bulletinBoard.reserveSpot(receiveIndex);
+                if (receiveIndex != -1) {
                     break;
                 }
             }
@@ -636,7 +638,19 @@ public class ClientMain {
         // Controleer de gebruiker zijn keuze
         if (response == JOptionPane.YES_OPTION) {
             // verwijder eerst de gebruiker uit de lijst
-            jsonHandler.removeUserFromList(usernameCorrupt, listName);
+            JSONObject infoCorrupt = jsonHandler.removeUserFromList(usernameCorrupt, listName);
+
+            int sendIndexCorrupt = ((Long) infoCorrupt.get("sendIndex")).intValue();
+            int receiveIndexCorrupt = ((Long) infoCorrupt.get("receiveIndex")).intValue();
+            bulletinBoard.clearSpot(sendIndexCorrupt);
+            bulletinBoard.clearSpot(receiveIndexCorrupt);
+
+            if (indexesToFetch.containsKey(receiveIndexCorrupt)) {
+                indexesToFetch.remove(receiveIndexCorrupt);
+            } 
+            if (indexesToFetch.containsKey(sendIndexCorrupt)) {
+                indexesToFetch.remove(sendIndexCorrupt);
+            }
 
             // haal dit op voor de public key van de andere persoon te weten. Door alles op te halen extra veilig?
             HashMap<String, String> subscribers = bulletinBoard.getSubscribers();
@@ -648,7 +662,8 @@ public class ClientMain {
             int sendIndex;
             while (true) {
                 sendIndex = (int) (Math.random() * 999999);
-                if (bulletinBoard.reserveSpot(sendIndex)) {
+                sendIndex = bulletinBoard.reserveSpot(sendIndex);
+                if (sendIndex != -1) {
                     break;
                 }
             }
@@ -656,7 +671,8 @@ public class ClientMain {
             int receiveIndex;
             while (true) {
                 receiveIndex = (int) (Math.random() * 999999);
-                if (bulletinBoard.reserveSpot(receiveIndex)) {
+                receiveIndex = bulletinBoard.reserveSpot(receiveIndex);
+                if (receiveIndex != -1) {
                     break;
                 }
             }
@@ -739,7 +755,8 @@ public class ClientMain {
         int nextSendIndex;
         while(true) {
             nextSendIndex = (int) (Math.random() * 999999);
-            if (bulletinBoard.reserveSpot(nextSendIndex)) {
+            nextSendIndex = bulletinBoard.reserveSpot(nextSendIndex);
+            if (nextSendIndex != -1) {
                 break;
             }
         }
@@ -749,6 +766,11 @@ public class ClientMain {
 
         String message = "ID;" + username + ";" + hashUserName(username) + ";" + nextSendIndex + ";" + nextSendTag;
         String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
+        if (encryptedMessage.equals("Corrupt")){
+            recoverCorruptCommunication(usernameNewPerson, "newPeople", "Symmetric key");
+            bulletinBoard.clearSpot(nextSendIndex);
+        }
+        
 
         String derivedSymKey = deriveSymKey(sendTag, encodedKeySend);
 
@@ -771,7 +793,8 @@ public class ClientMain {
         int nextSendIndex;
         while(true) {
             nextSendIndex = (int) (Math.random() * 999999);
-            if (bulletinBoard.reserveSpot(nextSendIndex)) {
+            nextSendIndex = bulletinBoard.reserveSpot(nextSendIndex);
+            if (nextSendIndex != -1) {
                 break;
             }
         }
@@ -781,6 +804,11 @@ public class ClientMain {
 
         String message = "REQUEST;" + username + ";" + nextSendIndex + ";" + nextSendTag;
         String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
+        if (encryptedMessage.equals("Corrupt")){
+            recoverCorruptCommunication(userNameReceiver, "newPeople", "Symmetric key");
+            bulletinBoard.clearSpot(nextSendIndex);
+        }
+        
 
         String derivedSymKey = deriveSymKey(sendTag, encodedKeySend);
 
@@ -831,7 +859,8 @@ public class ClientMain {
         int nextSendIndex;
         while(true) {
             nextSendIndex = (int) (Math.random() * 999999);
-            if (bulletinBoard.reserveSpot(nextSendIndex)) {
+            nextSendIndex = bulletinBoard.reserveSpot(nextSendIndex);
+            if (nextSendIndex != -1) {
                 break;
             }
         }
@@ -841,6 +870,11 @@ public class ClientMain {
 
         String message = "ACCEPT;" + username + ";" + nextSendIndex + ";" + nextSendTag;
         String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
+        if (encryptedMessage.equals("Corrupt")){
+            recoverCorruptCommunication(userNameReceiver, "friendRequests", "Symmetric key");
+            bulletinBoard.clearSpot(nextSendIndex);
+        }
+
 
         String derivedSymKey = deriveSymKey(sendTag, encodedKeySend);
 
@@ -869,6 +903,7 @@ public class ClientMain {
 
         String message = "DECLINE;" + ";" + username + ";" + 0;
         String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
+
         
         System.out.println(username + " heeft een bericht gestuurd naar " + userNameReceiver + " op de index " + sendIndex);
         bulletinBoard.addMessage(sendIndex, encryptedMessage, sendTag);
@@ -981,7 +1016,8 @@ public class ClientMain {
         int nextSendIndex;
         while(true) {
             nextSendIndex = (int) (Math.random() * 999999);
-            if (bulletinBoard.reserveSpot(nextSendIndex)) {
+            nextSendIndex = bulletinBoard.reserveSpot(nextSendIndex);
+            if (nextSendIndex != -1) {
                 break;
             }
         }
@@ -991,6 +1027,10 @@ public class ClientMain {
 
         String message = "MESSAGE;" + username + ";" + nextSendIndex + ";" + nextSendTag + ";" + messageToSend;
         String encryptedMessage = encryptMessageWithAES(message, encodedKeySend);
+        if (encryptedMessage.equals("Corrupt")){
+            recoverCorruptCommunication(userNameReceiver, "friends", "Symmetric key");
+            bulletinBoard.clearSpot(nextSendIndex);
+        }
 
         String derivedSymKey = deriveSymKey(sendTag, encodedKeySend);
 
@@ -1163,17 +1203,21 @@ public class ClientMain {
     }
 
     public static String encryptMessageWithAES(String message, String base64encodedKey) throws Exception {
-        byte[] decodedKeyBytes = Base64.getDecoder().decode(base64encodedKey);
-        SecretKey symmetricKey = new SecretKeySpec(decodedKeyBytes, 0, decodedKeyBytes.length, "AES");
+        try {
+            byte[] decodedKeyBytes = Base64.getDecoder().decode(base64encodedKey);
+            SecretKey symmetricKey = new SecretKeySpec(decodedKeyBytes, 0, decodedKeyBytes.length, "AES");
 
-        // Initialiseer een AES Cipher in ENCRYPT_MODE
-        Cipher cipher = Cipher.getInstance("AES");
-        cipher.init(Cipher.ENCRYPT_MODE, symmetricKey);
-    
-        // Versleutel de boodschap en geef het resultaat terug
-        byte[] encryptedMessage = cipher.doFinal(message.getBytes(StandardCharsets.UTF_8));
-        String encryptedMessageString = Base64.getEncoder().encodeToString(encryptedMessage);
-        return encryptedMessageString;
+            // Initialiseer een AES Cipher in ENCRYPT_MODE
+            Cipher cipher = Cipher.getInstance("AES");
+            cipher.init(Cipher.ENCRYPT_MODE, symmetricKey);
+        
+            // Versleutel de boodschap en geef het resultaat terug
+            byte[] encryptedMessage = cipher.doFinal(message.getBytes(StandardCharsets.UTF_8));
+            String encryptedMessageString = Base64.getEncoder().encodeToString(encryptedMessage);
+            return encryptedMessageString;
+        } catch (Exception e) {
+            return "Corrupt";
+        }
     }
 
     // Encrypt symmetric key (K) with receiver's public key (PK_B)
