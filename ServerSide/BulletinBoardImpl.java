@@ -46,13 +46,9 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
         this.aantalDataServers = aantalDataServers; 
         jsonHandler = new JsonHandlerServer("ServerSide/subscribers.json");
 
-        if (aantalDataServers <= 10) {
-            indexMultiplyFactor = 10;
-        } else if (aantalDataServers <= 100) {
-            indexMultiplyFactor = 100;
-        } else {
-            indexMultiplyFactor = 1000; // wss niet meer of 1000 servers
-        }
+
+        indexMultiplyFactor = 1000; // wss niet meer of 1000 servers
+        
 
         dataServers = new ArrayList<>();
         for (int i = 0; i < aantalDataServers; i++) {
@@ -67,7 +63,7 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
 
     @Override
     public int reserveSpot(int index) {
-        synchronized (lockJsonFile) {
+        synchronized (lockForReserve) {
             DataServer dataServer = dataServers.get(serverIterator);
             serverIterator = (serverIterator + 1) % aantalDataServers;
 
@@ -241,6 +237,9 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
             System.out.println("Selecteer een optie:");
             System.out.println("1) corrupt een index");
             System.out.println("2) corrupt een tag");
+            System.out.println("3) Add a data server");
+            // Data servers verminderen -> aantal dataservers veranderen (geen requests meer die gaan naar de laatste dataserver)
+            // wachten tot de server leeg is en dan verwijderen uit de lijst
             
             int keuze = scanner.nextInt();
             scanner.nextLine(); // Consume newline
@@ -265,6 +264,15 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
                     ArrayList<BulletinBoardElement> bulletinBoardTag = dataServers.get(serverIDTag).getBulletinBoard();
                     bulletinBoardTag.get(indexOnTheServerTag).setTag(new byte[32]);
                     break;
+                case 3:
+                    System.out.println("Hoeveel servers wil je toevoegen?: ");
+                    int aantalExtraServers = scanner.nextInt();
+                    scanner.nextLine(); // Consume newline
+                    for (int i = 0; i < aantalExtraServers; i++) {
+                        dataServers.add(new DataServer(aantalDataServers, bulletinBoardSize));
+                        aantalDataServers++;
+                    }
+
                 default:
                     System.out.println("Ongeldige keuze. Probeer opnieuw.");
             }
