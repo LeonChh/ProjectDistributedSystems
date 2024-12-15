@@ -272,6 +272,7 @@ public class BulletinBoardImpl extends UnicastRemoteObject implements BulletinBo
                         dataServers.add(new DataServer(aantalDataServers, bulletinBoardSize));
                         aantalDataServers++;
                     }
+                    break;
 
                 default:
                     System.out.println("Ongeldige keuze. Probeer opnieuw.");
